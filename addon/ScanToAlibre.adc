@@ -1,0 +1,12 @@
+<AlibreDesignAddOn specificationVersion="2" friendlyName="ScanToAlibre">
+   <Author name="Frank's Workshop" link="http://www.franksworkshop.com.au"/>
+   <DLL loadedWhen="Startup" location="ScanToAlibre.dll"/>
+   <Copyright>Copyright (C) 2026 Frank's Workshop</Copyright>
+   <Icon location="ScanToAlibre.ico"/>
+   <Menu text="ScanToAlibre"/>
+   <Description>Turns 3D scans into Alibre Design parts.</Description>
+   <Workspace type="Always"/>
+   <Property name="Identifier" value="{3B8754FC-F18D-4AE9-887D-E48DD9EE5DCB}"/>
+   <MenuFile loadedWhen="Startup"/>
+   <PersistentData streamName="ScanToAlibre_Scan" StreamName="ScanToAlibre_Scan"/>
+</AlibreDesignAddOn>

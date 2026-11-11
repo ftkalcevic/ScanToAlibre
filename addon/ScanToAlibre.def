@@ -1,0 +1,10 @@
+; ScanToAlibre.def : exports Alibre Design looks up by name.
+; Names must stay undecorated - check with: dumpbin /exports ScanToAlibre.dll
+
+LIBRARY "ScanToAlibre"
+
+EXPORTS
+    AddOnLoad
+    AddOnInvoke
+    AddOnUnload
+    GetAddOnInterface

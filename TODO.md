@@ -1,0 +1,21 @@
+# To do
+
+- Answer the spec's open questions.
+- Decide whether Load still needs the `ScanToAlibre` parameter now that `HasPersistentDataToSave` lights Save.
+- Load PLY point clouds by making a mesh from them (Frank's choice).
+- Test Refine in Alibre.
+- Refine: decide what else it offers (filling holes, removing loose pieces and spikes), and whether long runs need a progress bar.
+- Test Orient in Alibre.
+- Keep fitted planes with the part, if they're wanted after it's closed.
+- An icon of its own.
+- Draw fewer points: a smaller simplified scan, or one that follows the zoom.
+- Keep the scan showing after a native command such as Measure ends the scan view (a Design Explorer tab that restarts it, as CAMForAlibre does, or another way).
+- Prove in Alibre: extruding up to an inserted surface from the add-on (`AD_TO_GEOMETRY`), creating a sketch and extrude.
+- Scan import (STL, PLY, OBJ, XYZ), cleaning and display.
+- Primitive fitting with deviation maps and design-intent snapping.
+- Section to sketch, then extrude or revolve.
+- Holes, fillets and chamfers.
+- Freeform B-spline surface fitting and insertion.
+- Lofts and sweeps through fitted sections.
+- Deviation of the finished part against the scan.
+- Help page.

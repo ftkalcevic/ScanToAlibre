@@ -1,0 +1,78 @@
+# ScanToAlibre specification
+
+Status: draft, from the scoping discussion of 11 November 2026. The add-on skeleton and an Insert Test Surface command are built and tested: `DesignSurfaces.InsertFromFile` inserts our IGES B-spline patch into a part, and an extrude To Geometry in Alibre's interface stops at it. The other Alibre calls listed here are untried.
+
+## Purpose
+
+Turn a 3D scan (an STL mesh or a point cloud) into a real, editable Alibre Design part. The user identifies features on the scan interactively, and the add-on creates Alibre features from them. Freeform areas get fitted B-spline surfaces.
+
+## Platform
+
+- An Alibre Design add-on in C++/MFC, x64, targeting Alibre 27.0.1.27039. The generated 27.0.1 headers are the authority (the API docs describe v29).
+- Same layout as CAMForAlibre: `addon\` (the only code that calls Alibre or MFC), `core\` (a static library with no Alibre or MFC code, millimetres, UTF-8, tested), `tests\` (doctest), `third_party\` (pinned copies with licences).
+- Planned libraries: Eigen (MPL2) for least squares and nanoflann (BSD) for k-d trees. OpenCASCADE (LGPL 2.1 with exception, dynamic link) only when whole freeform bodies are needed.
+- Code to adapt from CAMForAlibre `core\`: `Nurbs` (evaluation, derivatives, closest point), `SurfaceGeometry` (analytic sphere, cylinder, cone and torus), `ArcFit` (lines and arcs fitted to polylines), `Boundary`, STL writing from `Simulation`, and `WriteFileAtomically`.
+
+## What the 27.0.1 API offers
+
+From `AlibreX_64.tlh` and `AlibreAddOn_64.tlh`, all unproven:
+
+- **Showing the scan:** add-on graphics in `On3DRender`, as in CAMForAlibre. A 200,000-point polyline took 47 ms there, so large scans need level of detail. Alibre can also hold a mesh natively (`ImportNonNative3DFile`, `GetDesignMeshes`, `AddMeshBooleanFeature`).
+- **Picking on the scan:** Alibre doesn't pick add-on graphics, so we cast our own ray from a view command's click with `ScreenToWorld` and the view transform.
+- **Creating features:** sketches (lines, arcs, circles, ellipses, B-splines, constraints, dimensions), 3D sketches with B-splines, design planes, axes and points, extrude, revolve, sweep, loft with guide curves, holes, fillets, chamfers, draft, shell, and named parameters.
+- **Surfaces:** `IADPartSession::DesignSurfaces->InsertFromFile(file, faceProcessing, heal, makeTolerant, units)` inserts surfaces from STEP, IGES or SAT into an existing part, optionally stitched. Extrudes, cutouts and holes can end `AD_TO_GEOMETRY` at a chosen object.
+- **Not available:** surface features (patch, knit, thicken, replace face), and pattern and mirror features.
+
+## The ribbon is the workflow (Frank's decision, 11 November 2026)
+
+The ScanToAlibre ribbon tab's buttons are the steps, in order:
+
+1. **Load:** reads a scan into the part: STL, and PLY (meshes, and point clouds, which are made into a mesh when loaded; Frank chose that over drawing points as small discs). The scan is saved inside the part, in the `.AD_PRT`, through Alibre's add-on data stream (Frank chose that over a file beside the part). Loading into a part that has a scan asks before replacing it.
+2. **Refine** (Frank asked for a better name than Fix): a modeless dialog that changes the scan straight away, with Undo (up to five changes back).
+   - **Decimate:** fewer triangles, to a number or a percent of now, optionally stopping before the surface moves more than a set distance, and optionally keeping open edges in place. Quadric edge collapse (Garland and Heckbert).
+   - **Smooth:** a choice of Laplacian (simple; shrinks the shape), Taubin (keeps the size) and Bilateral (bilateral normal filtering; keeps sharp edges, the default for machined parts), with passes, a strength from 0 to 1, and keeping open edges in place.
+   - Opening Refine also starts the scan view, so the changes show.
+3. **Orient:** a modeless dialog (all Frank's choices, 11 November 2026):
+   - **Move** by X, Y and Z (mm), or centre the scan on the origin; **Rotate** about X, Y or Z by an angle, through the origin or the scan's centre; **Scale** by a uniform factor, through either.
+   - A **box fitted to the scan** (its principal directions, from the surface), drawn with its edges, three centre planes (A square to the longest direction, then B, C; red, green, blue), three axes and its centre. It's fitted when the scan is loaded or refined, and then moves with it.
+   - **Fit Plane:** clicks on the scan grow a selection over a flat area (within an angle and a distance of the area's fitted plane); clicking a selected area takes it away. Fit Plane adds Plane 1, Plane 2 and so on.
+   - **Align in 3-2-1 steps.** Choose one of the scan's planes, axes or its centre by clicking it in the view, and a target by clicking one of Alibre's planes, axes or points in the view (Alibre's own selection). Step 1 puts a plane on a plane (or an axis on an axis), turning and moving freely; step 2 turns only about what step 1 fixed and slides within it; step 3 slides only. Flip turns the scan's plane or axis the other way round. Move, Rotate and Scale start the alignment over.
+   - Undo takes back moves, fitted planes and Refine's changes alike, up to five. Only the scan is saved in the part; fitted planes and the alignment's progress last until the part is closed.
+
+Only one of the workflow's dialogs is open at a time (Frank's rule): opening one closes another. Then **Show Scan** (draws the scan again after a native command ended the view) and **About**. Later steps (fitting, sections, surfaces) follow as further buttons.
+
+## Workflow after Orient
+
+1. **Fit primitives:** the user clicks a seed point; region growing and a least-squares fit give a plane, cylinder, cone, sphere or torus, shown with a deviation colour map. Snap to design intent: round values, and parallel, perpendicular or coaxial to features already found.
+2. **Sections to sketches:** put a plane through the scan, slice it into a polyline, fit lines and arcs (with tangency), constrain, and create a sketch, then extrude or revolve it. This covers most mechanical parts.
+3. **Detail features:** holes, fillets and chamfers from fitted cylinders and blends, created after the base body.
+4. **Freeform surfaces:**
+   - Fit an oversized, untrimmed B-spline patch to a picked region (projection onto a base plane or cylinder, smoothing, parameter correction), with a deviation map and control over the control-point count and smoothing.
+   - Write it as IGES (type 128) or STEP (`B_SPLINE_SURFACE_WITH_KNOTS`) ourselves.
+   - Insert it with `DesignSurfaces.InsertFromFile`.
+   - Use it with native features: extrude a sketched outline up to it, cut a block down to it, or end holes at it.
+   - Lofts and sweeps through fitted B-spline sections and guide curves, for duct- and handle-like shapes.
+   - Whole freeform bodies (patches sewn into a solid) need OpenCASCADE and a STEP import. Later.
+5. **Compare:** a deviation map of the finished part (its facets) against the scan.
+
+## Open questions
+
+- Mostly mechanical or organic parts. That decides whether whole freeform bodies are in version 1.
+- How point clouds are made into meshes on Load (surface reconstruction: ball pivoting, Poisson, or another method).
+- What else Refine offers besides decimating and smoothing (filling holes, removing loose pieces, removing spikes).
+- Whether the add-on also gets a Design Explorer tab (to restart the scan view after native commands).
+
+Answered: Frank's scanner writes PLY meshes (`Mesh.ply`, about 1 million faces) and PLY point clouds with normals (`Optimization.ply`, `model.ply`, 54,000 to 6.9 million points), as well as STL exports.
+
+## First steps
+
+1. Add-on skeleton: solution, `addon\`, `core\`, `tests\`, install scripts, log, a ribbon command.
+2. Prove in Alibre:
+   - drawing a scan of 1 to 2 million triangles at a usable speed;
+   - ray picking with `ScreenToWorld`;
+   - `DesignSurfaces.InsertFromFile` of a hand-written IGES B-spline patch;
+   - an extrude `AD_TO_GEOMETRY` up to that surface;
+   - creating a sketch and an extrude from the add-on;
+   - what `AddMeshBooleanFeature` does with a design mesh.
+3. Core: scan reader, k-d tree, and plane, cylinder, sphere and cone fitting (region growing and RANSAC), tested on synthetic noisy data.
+4. Section to sketch to extrude or revolve: the first end-to-end tool.
