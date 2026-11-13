@@ -5,6 +5,7 @@
 #include "ScanImport.h"
 #include "ScanDocument.h"
 #include "StepDialog.h"
+#include "ScanViewCommand.h"
 #include "Log.h"
 
 #include "ScanFile.h"
@@ -90,6 +91,7 @@ bool MarkPartChanged(const std::wstring& sessionId, const std::wstring& comment)
         opened = false;
 
         Log(L"[changed] %s parameter ScanToAlibre = %g", created ? L"created" : L"updated", value);
+        RefreshAlibreButtons();
         return true;
     }
     catch (const _com_error& error)

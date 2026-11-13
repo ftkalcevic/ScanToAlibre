@@ -3,9 +3,10 @@
 //
 // Saving: Alibre asks HasPersistentDataToSave when it saves the part, then
 // calls SaveData with a stream that's kept in the .AD_PRT, and LoadData with
-// it when the part is opened (see AddOnInterface). Only the mesh is saved; the
-// fitted box is worked out again, and fitted planes and the alignment's
-// progress last until the part is closed.
+// it when the part is opened (see AddOnInterface). The mesh is saved, and the
+// fitted planes and axes with it (ScanData version 2); the fitted
+// box is worked out again, and the alignment's progress lasts until the part
+// is closed.
 
 #pragma once
 
@@ -33,24 +34,29 @@ struct ScanDocument
     bool unsaved = false;
 
     // Orient: the box fitted to the scan (worked out when the mesh is loaded or
-    // refined, then moved with the scan), planes fitted to flat areas, the
+    // refined, then moved with the scan), planes and axes fitted to flat areas and cylinders, the
     // triangles chosen for the next fit, and the 3-2-1 alignment's progress.
     scancore::OrientedBox box;
-    std::vector<scancore::Feature> fittedPlanes;
+    std::vector<scancore::Feature> fitted;
     std::vector<int> selection;                 // triangle numbers, sorted
     scancore::AlignState align;
 
-    // While the Orient dialog is open: the view draws the box and planes, and a
-    // click picks one of them (or, in select mode, grows a flat area).
+    // While the Orient dialog is open the view draws the box and planes, and its
+    // push-down buttons say what a click does (at most one is down): Scan, a click
+    // chooses one of the scan's planes, axes or its centre; Target, Alibre's own
+    // selection becomes the target; Area or Cylinder, a click grows a flat area
+    // or a cylinder (outside or a hole) to select.
+    // None, clicks are Alibre's alone.
+    enum class ClickMode { None, Scan, Target, Area, Cylinder };
     bool orienting = false;
-    bool selectMode = false;
+    ClickMode clickMode = ClickMode::None;
     double growAngle = 10.0;                    // degrees
     double growDistance = 0.2;                  // mm
     int chosen = -1;                            // in Features(), or -1
     bool haveTarget = false;                    // Alibre geometry clicked in the view
     scancore::Feature target;                   // in mm
 
-    // The box's centre planes, axes and centre, then the fitted planes.
+    // The box's centre planes, axes and centre, then the fitted planes and axes.
     std::vector<scancore::Feature> Features() const;
 
     // The arrays the canvas takes, made once per level of detail, in the
@@ -84,7 +90,7 @@ struct ScanDocument
     // Changes, each kept for Undo (at most kUndoSteps).
     void ReplaceMesh(scancore::Mesh&& mesh);                     // Refine: the box is fitted again
     void Move(const scancore::Transform& transform, const scancore::AlignState& align);
-    void AddFittedPlane(const scancore::Feature& plane);
+    void AddFitted(const scancore::Feature& feature);
     bool CanUndo() const { return !m_undo.empty(); }
     void Undo();
 
@@ -93,7 +99,7 @@ private:
     {
         scancore::Mesh mesh;
         scancore::OrientedBox box;
-        std::vector<scancore::Feature> fittedPlanes;
+        std::vector<scancore::Feature> fitted;
         scancore::AlignState align;
         std::vector<scancore::Point3> picked;
     };

@@ -193,19 +193,19 @@ TEST_CASE("3-2-1 alignment squares a turned, moved box onto the origin")
 
     // Step 1: the box's thin direction's centre plane onto XY.
     Transform move;
-    REQUIRE(AlignStep(Named(BoxFeatures(box), "Box plane C"), xy, false, state, move, message));
+    REQUIRE(AlignStep(Named(BoxFeatures(box), "Box plane C"), xy, false, AxisToPlane::Square, state, move, message));
     TransformMesh(mesh, move);
     box.ApplyTransform(move);
     CHECK(state.step == 1);
 
     // Step 2: the long direction's centre plane onto YZ, turning only about Z.
-    REQUIRE(AlignStep(Named(BoxFeatures(box), "Box plane A"), yz, false, state, move, message));
+    REQUIRE(AlignStep(Named(BoxFeatures(box), "Box plane A"), yz, false, AxisToPlane::Square, state, move, message));
     TransformMesh(mesh, move);
     box.ApplyTransform(move);
     CHECK(state.step == 2);
 
     // Step 3: the middle direction's centre plane onto ZX, sliding only.
-    REQUIRE(AlignStep(Named(BoxFeatures(box), "Box plane B"), zx, false, state, move, message));
+    REQUIRE(AlignStep(Named(BoxFeatures(box), "Box plane B"), zx, false, AxisToPlane::Square, state, move, message));
     TransformMesh(mesh, move);
     box.ApplyTransform(move);
     CHECK(state.step == 3);
@@ -219,7 +219,7 @@ TEST_CASE("3-2-1 alignment squares a turned, moved box onto the origin")
     CHECK(bounds.high.z == doctest::Approx(10.0));
 
     // A fourth step is refused.
-    CHECK_FALSE(AlignStep(Named(BoxFeatures(box), "Box plane B"), zx, false, state, move, message));
+    CHECK_FALSE(AlignStep(Named(BoxFeatures(box), "Box plane B"), zx, false, AxisToPlane::Square, state, move, message));
 }
 
 TEST_CASE("alignment refuses a mismatch and a second plane parallel to the first")
@@ -233,11 +233,11 @@ TEST_CASE("alignment refuses a mismatch and a second plane parallel to the first
     Feature axis;
     axis.kind = Feature::Kind::Axis;
     axis.direction = { 0, 0, 1 };
-    CHECK_FALSE(AlignStep(Named(BoxFeatures(box), "Box plane C"), axis, false, state, move, message));
+    CHECK_FALSE(AlignStep(Named(BoxFeatures(box), "Box plane C"), axis, false, AxisToPlane::Square, state, move, message));
     CHECK(state.step == 0);
 
-    REQUIRE(AlignStep(Named(BoxFeatures(box), "Box plane C"), Plane({}, { 0, 0, 1 }), false, state, move, message));
-    CHECK_FALSE(AlignStep(Named(BoxFeatures(box), "Box plane C"), Plane({}, { 0, 0, 1 }), false, state, move,
+    REQUIRE(AlignStep(Named(BoxFeatures(box), "Box plane C"), Plane({}, { 0, 0, 1 }), false, AxisToPlane::Square, state, move, message));
+    CHECK_FALSE(AlignStep(Named(BoxFeatures(box), "Box plane C"), Plane({}, { 0, 0, 1 }), false, AxisToPlane::Square, state, move,
                           message));
     CHECK(state.step == 1);
 }
@@ -251,7 +251,55 @@ TEST_CASE("flipping turns the scan over instead of the short way")
     Transform move;
     // Box plane C's normal is +Z or -Z; onto XY flipped, it must end the other way.
     const Feature c = Named(BoxFeatures(box), "Box plane C");
-    REQUIRE(AlignStep(c, Plane({}, { 0, 0, 1 }), true, state, move, message));
+    REQUIRE(AlignStep(c, Plane({}, { 0, 0, 1 }), true, AxisToPlane::Square, state, move, message));
     const Point3 after = move.ApplyDirection(c.direction);
     CHECK(Dot(after, c.direction) == doctest::Approx(-1.0));
+}
+
+TEST_CASE("the fitted box sits on a lopsided part's faces, where the principal directions would tilt")
+{
+    // A 80 x 40 x 20 block with a 10 mm cube stuck on one corner of its top.
+    Mesh mesh = BoxMesh(40.0, 20.0, 10.0, 4);
+    Mesh lump = BoxMesh(5.0, 5.0, 5.0, 2);
+    TransformMesh(lump, Transform::Translation({ 35.0, 15.0, 15.0 }));
+    const int offset = static_cast<int>(mesh.vertices.size());
+    mesh.vertices.insert(mesh.vertices.end(), lump.vertices.begin(), lump.vertices.end());
+    for (auto tri : lump.triangles)
+        mesh.triangles.push_back({ tri[0] + offset, tri[1] + offset, tri[2] + offset });
+
+    for (const Transform& placed : { Transform(), Skew() })
+    {
+        Mesh moved = mesh;
+        TransformMesh(moved, placed);
+        const OrientedBox box = FitOrientedBox(moved);
+        CHECK(Parallel(box.axes[0], placed.ApplyDirection({ 1, 0, 0 })));
+        CHECK(Parallel(box.axes[1], placed.ApplyDirection({ 0, 1, 0 })));
+        CHECK(Parallel(box.axes[2], placed.ApplyDirection({ 0, 0, 1 })));
+        CHECK(box.halfSize[0] == doctest::Approx(40.0));
+        CHECK(box.halfSize[1] == doctest::Approx(20.0));
+        CHECK(box.halfSize[2] == doctest::Approx(15.0));
+        CHECK(Length(box.centre - placed.Apply({ 0.0, 0.0, 5.0 })) < 1e-9);
+    }
+}
+
+// Skipped unless asked for: set SCANTOALIBRE_STL to a scan and run
+//   ScanCoreTests.exe -tc="fitted box of a real scan*" --no-skip
+TEST_CASE("fitted box of a real scan" * doctest::skip())
+{
+    char* value = nullptr;
+    size_t length = 0;
+    REQUIRE(_dupenv_s(&value, &length, "SCANTOALIBRE_STL") == 0);
+    REQUIRE(value != nullptr);
+    const std::string path(value);
+    free(value);
+    Mesh mesh;
+    std::string message;
+    REQUIRE(ReadStl(path, mesh, message));
+    const auto t0 = std::chrono::steady_clock::now();
+    const OrientedBox box = FitOrientedBox(mesh);
+    const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+    MESSAGE("box " << 2 * box.halfSize[0] << " x " << 2 * box.halfSize[1] << " x " << 2 * box.halfSize[2]
+                   << " in " << ms << " ms; axes (" << box.axes[0].x << ", " << box.axes[0].y << ", " << box.axes[0].z
+                   << "), (" << box.axes[1].x << ", " << box.axes[1].y << ", " << box.axes[1].z << "), ("
+                   << box.axes[2].x << ", " << box.axes[2].y << ", " << box.axes[2].z << ")");
 }

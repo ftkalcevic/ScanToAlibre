@@ -22,6 +22,12 @@ struct ScanDocument;
 // Redraws every running scan view (after the scan changes).
 void RefreshScanViews();
 
+// Asks Alibre to refresh its buttons through a running scan view's command site
+// (UpdateToolbars), so Save lights once the scan has changed: Alibre asks
+// HasPersistentDataToSave only when it refreshes them, which a change made in
+// a ScanToAlibre dialog doesn't otherwise cause.
+void RefreshAlibreButtons();
+
 class CScanViewCommand : public CCommandBase
 {
 public:

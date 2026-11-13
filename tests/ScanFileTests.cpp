@@ -163,7 +163,7 @@ TEST_CASE("scan data round trips, and newer or damaged data is refused")
     scan.sourceName = u8"C:\\scans\\cover \u00e9.ply";
 
     const std::string bytes = WriteScanData(scan);
-    CHECK(bytes.size() == 8 + 4 + 4 + 8 + 8 + 4 + scan.sourceName.size() + 4 * 12 + 2 * 12);
+    CHECK(bytes.size() == 8 + 4 + 4 + 8 + 8 + 4 + scan.sourceName.size() + 4 * 12 + 2 * 12 + 4);
 
     ScanData back;
     REQUIRE(ReadScanData(bytes, back, message) == ScanDataStatus::Ok);
@@ -190,6 +190,69 @@ TEST_CASE("scan data round trips, and newer or damaged data is refused")
     const uint64_t huge = 1ull << 40;
     std::memcpy(&badCount[16], &huge, 8);
     CHECK(ReadScanData(badCount, back, message) == ScanDataStatus::Damaged);
+}
+
+TEST_CASE("fitted planes and axes are saved with the scan and read back")
+{
+    ScanData scan;
+    std::string message;
+    ScanFileInfo info;
+    REQUIRE(ParseScanFile(BinaryPly(false), "Mesh.ply", scan.mesh, info, message));
+    Feature plane;
+    plane.kind = Feature::Kind::Plane;
+    plane.point = { 1.5, -2.25, 3.125 };
+    plane.direction = { 0.0, 0.6, 0.8 };
+    plane.halfWidth = 12.5;
+    plane.name = "Plane 1";
+    Feature axis;
+    axis.kind = Feature::Kind::Axis;
+    axis.point = { 10.0, 20.0, 30.0 };
+    axis.direction = { 1.0, 0.0, 0.0 };
+    axis.halfWidth = 7.0;
+    axis.name = "Axis 1 (diameter 12.030, hole)";
+    scan.features = { plane, axis };
+
+    ScanData back;
+    REQUIRE(ReadScanData(WriteScanData(scan), back, message) == ScanDataStatus::Ok);
+    REQUIRE(back.features.size() == 2);
+    CHECK(back.features[0].kind == Feature::Kind::Plane);
+    CHECK(back.features[0].point.y == -2.25);
+    CHECK(back.features[0].direction.z == 0.8);
+    CHECK(back.features[0].halfWidth == 12.5);
+    CHECK(back.features[0].name == "Plane 1");
+    CHECK(back.features[1].kind == Feature::Kind::Axis);
+    CHECK(back.features[1].name == axis.name);
+    CHECK(back.mesh.triangles == scan.mesh.triangles);
+
+    // A damaged feature (an unknown kind) is refused, not half read.
+    std::string bytes = WriteScanData(scan);
+    const size_t firstKind = bytes.size() - (1 + 7 * 8 + 4 + axis.name.size()) - (1 + 7 * 8 + 4 + plane.name.size());
+    bytes[firstKind] = 7;
+    CHECK(ReadScanData(bytes, back, message) == ScanDataStatus::Damaged);
+    CHECK(back.features.empty());
+
+    // Cut off part way through the features.
+    const std::string whole = WriteScanData(scan);
+    CHECK(ReadScanData(whole.substr(0, whole.size() - 5), back, message) == ScanDataStatus::Damaged);
+}
+
+TEST_CASE("scan data from version 1 still reads, with no fitted features")
+{
+    ScanData scan;
+    std::string message;
+    ScanFileInfo info;
+    REQUIRE(ParseScanFile(BinaryPly(false), "Mesh.ply", scan.mesh, info, message));
+    scan.sourceName = "old.ply";
+    const std::string bytes = WriteScanDataVersion1(scan);
+    uint32_t version = 0;
+    std::memcpy(&version, bytes.data() + 8, 4);
+    CHECK(version == 1);
+
+    ScanData back;
+    REQUIRE(ReadScanData(bytes, back, message) == ScanDataStatus::Ok);
+    CHECK(back.sourceName == "old.ply");
+    CHECK(back.mesh.triangles == scan.mesh.triangles);
+    CHECK(back.features.empty());
 }
 
 // Skipped unless asked for: set SCANTOALIBRE_PLY to a PLY scan and run

@@ -9,22 +9,31 @@
 //   uint32    source name length, then the name in UTF-8 (the file it was loaded from)
 //   float32   x, y, z for each vertex, in mm
 //   uint32    three vertex numbers for each triangle
-// A newer version is refused, so it's never overwritten by an older add-on.
+// From version 2, the planes and axes fitted in Orient:
+//   uint32    feature count, then for each:
+//     uint8     kind: 0 plane, 1 axis, 2 point
+//     float64   point x, y, z (mm), direction x, y, z (unit), half width (mm, for drawing)
+//     uint32    name length, then the name in UTF-8
+// Version 1 reads with no features. A newer version is refused, so it's never
+// overwritten by an older add-on.
 
 #pragma once
 
 #include <string>
+#include <vector>
 
 #include "Mesh.h"
+#include "Orient.h"
 
 namespace scancore
 {
-    const unsigned kScanDataVersion = 1;
+    const unsigned kScanDataVersion = 2;
 
     struct ScanData
     {
         Mesh mesh;
-        std::string sourceName;     // UTF-8
+        std::string sourceName;             // UTF-8
+        std::vector<Feature> features;      // fitted planes and axes
     };
 
     std::string WriteScanData(const ScanData& scan);
@@ -38,4 +47,7 @@ namespace scancore
     };
 
     ScanDataStatus ReadScanData(const std::string& bytes, ScanData& scan, std::string& message);
+
+    // Version 1 exactly, for testing that it still reads.
+    std::string WriteScanDataVersion1(const ScanData& scan);
 }

@@ -6,7 +6,7 @@
 //     1 Load                (leaf, id 103)  -> parts only: reads a scan, starts the scan view
 //     2 Refine              (leaf, id 105)  -> parts with a scan: decimate and smooth (a modeless dialog)
 //     3 Orient              (leaf, id 106)  -> parts with a scan: move, rotate, scale, fit planes, align (a modeless dialog)
-//     Show Scan             (leaf, id 104)  -> parts with a scan: starts the scan view again
+//     Show Scan             (leaf, id 104)  -> parts with a scan: a two-way toggle that draws the scan through native commands
 //     About                 (leaf, id 101)  -> stateless command: shows About box
 // Insert Test Surface (id 102) proved surface insertion and is no longer on the ribbon.
 

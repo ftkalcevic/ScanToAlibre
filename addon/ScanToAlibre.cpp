@@ -10,6 +10,7 @@
 #include "Log.h"
 #include "ScanDocument.h"
 #include "StepDialog.h"
+#include "ScanDisplayCommand.h"
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -97,6 +98,7 @@ void AddOnUnload(HWND /*windowHandle*/, BOOL /*forceUnload*/, BOOL* cancel,
         theApp.m_pAddOn = nullptr;
     }
     CloseStepDialog();
+    ReleaseScanDisplays();
     ClearScans();
     theApp.m_pRoot = nullptr;
     RemoveCrashCatcher();

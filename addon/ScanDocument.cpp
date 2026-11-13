@@ -149,13 +149,13 @@ void ScanDocument::SetSelection(std::vector<int> triangles)
 std::vector<scancore::Feature> ScanDocument::Features() const
 {
     std::vector<scancore::Feature> features = scancore::BoxFeatures(box);
-    features.insert(features.end(), fittedPlanes.begin(), fittedPlanes.end());
+    features.insert(features.end(), fitted.begin(), fitted.end());
     return features;
 }
 
 void ScanDocument::Remember()
 {
-    m_undo.push_back({ mesh, box, fittedPlanes, align, picked });
+    m_undo.push_back({ mesh, box, fitted, align, picked });
     if (m_undo.size() > kUndoSteps)
         m_undo.erase(m_undo.begin());
 }
@@ -190,7 +190,7 @@ void ScanDocument::Move(const scancore::Transform& transform, const scancore::Al
     scancore::TransformMesh(mesh, transform);
     scancore::TransformMesh(display, transform);
     box.ApplyTransform(transform);
-    for (scancore::Feature& plane : fittedPlanes)
+    for (scancore::Feature& plane : fitted)
         plane.ApplyTransform(transform);
     for (scancore::Point3& p : picked)
         p = transform.Apply(p);
@@ -198,10 +198,11 @@ void ScanDocument::Move(const scancore::Transform& transform, const scancore::Al
     DrawingChanged(false);
 }
 
-void ScanDocument::AddFittedPlane(const scancore::Feature& plane)
+void ScanDocument::AddFitted(const scancore::Feature& feature)
 {
     Remember();
-    fittedPlanes.push_back(plane);
+    fitted.push_back(feature);
+    unsaved = true;     // saved with the scan
 }
 
 void ScanDocument::Undo()
@@ -212,7 +213,7 @@ void ScanDocument::Undo()
     const bool trianglesChanged = last.mesh.triangles != mesh.triangles;
     mesh = std::move(last.mesh);
     box = last.box;
-    fittedPlanes = std::move(last.fittedPlanes);
+    fitted = std::move(last.fitted);
     align = last.align;
     picked = std::move(last.picked);
     m_undo.pop_back();

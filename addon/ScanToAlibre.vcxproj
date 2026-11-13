@@ -108,6 +108,7 @@
   <ItemGroup>
     <ClCompile Include="AboutDlg.cpp" />
     <ClCompile Include="AddOnInterface.cpp" />
+    <ClCompile Include="ScanDisplayCommand.cpp" />
     <ClCompile Include="OrientDialog.cpp" />
     <ClCompile Include="RefineDialog.cpp" />
     <ClCompile Include="StepDialog.cpp" />
@@ -126,6 +127,7 @@
   <ItemGroup>
     <ClInclude Include="AboutDlg.h" />
     <ClInclude Include="AddOnInterface.h" />
+    <ClInclude Include="ScanDisplayCommand.h" />
     <ClInclude Include="OrientDialog.h" />
     <ClInclude Include="RefineDialog.h" />
     <ClInclude Include="StepDialog.h" />

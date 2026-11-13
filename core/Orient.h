@@ -39,8 +39,11 @@ namespace scancore
     // Eigenvalues (ascending) and unit eigenvectors of a symmetric 3 x 3 matrix, by Jacobi rotations.
     void SymmetricEigen(const double a[3][3], double values[3], Point3 vectors[3]);
 
-    // A box turned to the scan's principal directions: axes[0] along the longest
-    // spread, axes[2] the shortest, right-handed; halfSize along each.
+    // The smallest box round the scan, among boxes with one axis along a
+    // candidate direction (the largest flat areas' normals, the world axes, the
+    // principal directions), each turned about it to fit tightest, but square to
+    // the part's large flat areas wherever that costs at most 5% more. axes[0] is
+    // its longest side, axes[2] the shortest, right-handed; halfSize along each.
     struct OrientedBox
     {
         Point3 centre;
@@ -51,7 +54,9 @@ namespace scancore
         std::array<Point3, 8> Corners() const;      // corner i has + along axis k when bit k of i is set
     };
 
-    // From the surface (area-weighted triangles), so uneven point spacing doesn't tilt it.
+    // The principal directions alone followed where the material is, which
+    // tilted the box off a part's flat faces (2 degrees on Frank's popsicle
+    // dispenser); the smallest box sits on them.
     OrientedBox FitOrientedBox(const Mesh& mesh);
 
     // Geometry to align: a plane (point and unit normal), an axis (point and unit
@@ -86,22 +91,54 @@ namespace scancore
     // root mean square distance of their corners from it.
     bool FitPlane(const Mesh& mesh, const std::vector<int>& triangles, Feature& plane, double* rms = nullptr);
 
-    // 3-2-1 alignment. Step 1 puts a scan plane on a target plane (or an axis on
-    // an axis), turning and moving freely. Step 2 turns only about the line step
-    // 1 fixed, and moves only where step 1 allows. Step 3 moves only along what's
-    // left. A point onto a point moves only, within whatever's still free.
-    struct AlignState
+    // Grows from a triangle over a cylinder (outside or a hole): first over the
+    // smooth surface (neighbours within angleDegrees of each other), and once
+    // the normals turn enough to fit a cylinder, only over triangles within
+    // distance (mm) of it whose normals point square to its axis. Refits as it
+    // doubles. Returns the triangles, sorted.
+    std::vector<int> GrowCylinder(const Mesh& mesh, const std::vector<std::array<int, 3>>& neighbours, int seed,
+                                  double angleDegrees, double distance);
+
+    struct CylinderFit
     {
-        int step = 0;                   // steps done: 0 to 3
-        bool firstWasPlane = true;
-        Point3 turnAxis;                // after step 1: the line the scan may still turn about
-        Point3 turnPivot;
-        Point3 slide;                   // after step 2: the one direction still free
+        Feature axis;                   // the centre line: point midway along the triangles, unit direction
+        double radius = 0.0;
+        bool hole = false;              // the triangles face the axis
+        double rms = 0.0;               // of their corners' distances from the cylinder
     };
 
+    // The axis from the triangles' normals (the direction they're all square
+    // to), then the centre and radius from a circle fitted to their corners seen
+    // along it. Returns false if the normals don't turn enough to tell an axis.
+    bool FitCylinder(const Mesh& mesh, const std::vector<int>& triangles, CylinderFit& fit);
+
+    // 3-2-1 alignment, generalised: each step puts a scan plane on a target
+    // plane, an axis on an axis, an axis onto a plane (square to it or lying in
+    // it), or a point on a point, turning and sliding only in the ways earlier
+    // steps left free, and then fixes what it lined up. The first step turns and
+    // slides freely; a plane or axis then leaves turning about one line; a later
+    // turn fixes that. A step that would fix nothing new is refused.
+    struct AlignState
+    {
+        enum class Turn { Free, About, None };
+        int step = 0;                   // steps done
+        Turn turn = Turn::Free;
+        Point3 turnAxis;                // with About: the line the scan may still turn about
+        Point3 turnPivot;
+        std::vector<Point3> slides{ { 1, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1 } };   // free directions, orthonormal
+
+        bool Done() const { return turn == Turn::None && slides.empty(); }
+    };
+
+    enum class AxisToPlane { Square, InPlane };
+
     // Works out the next step's move. flip turns the scan's plane or axis the
-    // other way round. Returns false, with a message, if the two can't be aligned
-    // at this step (such as a plane onto an axis, or a second plane parallel to the first).
-    bool AlignStep(const Feature& scan, const Feature& target, bool flip, AlignState& state, Transform& move,
-                   std::string& message);
+    // other way round. Returns false, with a message, if they can't be aligned
+    // now (such as a plane onto an axis, or a move earlier steps fixed).
+    bool AlignStep(const Feature& scan, const Feature& target, bool flip, AxisToPlane axisToPlane, AlignState& state,
+                   Transform& move, std::string& message);
+
+    // What the alignment still leaves free, for showing: such as "turning about
+    // (0, 0, 1); sliding in 2 directions".
+    std::string FreedomText(const AlignState& state);
 }

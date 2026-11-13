@@ -68,6 +68,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="CylinderTests.cpp" />
     <ClCompile Include="MeshTests.cpp" />
     <ClCompile Include="OrientTests.cpp" />
     <ClCompile Include="RefineTests.cpp" />

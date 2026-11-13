@@ -10,6 +10,7 @@
 #include "ScanData.h"
 #include "RefineDialog.h"
 #include "OrientDialog.h"
+#include "ScanDisplayCommand.h"
 #include "SurfaceTest.h"
 #include "Log.h"
 
@@ -183,8 +184,10 @@ STDMETHODIMP CAddOnInterface::MenuItemState(long menuID, BSTR sessionIdentifier,
         *pType = ADDONMenuStates_ADDON_MENU_ENABLED;
     else if ((menuID == MENU_ID_TEST_SURFACE || menuID == MENU_ID_LOAD) && part)
         *pType = ADDONMenuStates_ADDON_MENU_ENABLED;
-    else if ((menuID == MENU_ID_SHOW_SCAN || menuID == MENU_ID_REFINE || menuID == MENU_ID_ORIENT) && part &&
-             FindScan(sessionIdentifier) != nullptr)
+    else if (menuID == MENU_ID_SHOW_SCAN && part && FindScan(sessionIdentifier) != nullptr)
+        *pType = ScanDisplayOn(sessionIdentifier) ? ADDONMenuStates_ADDON_MENU_CHECKED
+                                                  : ADDONMenuStates_ADDON_MENU_UNCHECKED;
+    else if ((menuID == MENU_ID_REFINE || menuID == MENU_ID_ORIENT) && part && FindScan(sessionIdentifier) != nullptr)
         *pType = ADDONMenuStates_ADDON_MENU_ENABLED;
     else
         *pType = ADDONMenuStates_ADDON_MENU_GRAYED;
@@ -218,7 +221,8 @@ STDMETHODIMP CAddOnInterface::MenuItemToolTip(long menuID, BSTR* pToolTip)
                             L"line it up with the part's planes, axes and origin in 3-2-1 steps.").Detach();
         break;
     case MENU_ID_SHOW_SCAN:
-        *pToolTip = _bstr_t(L"Show this part's scan again, after another command ended the scan view.").Detach();
+        *pToolTip = _bstr_t(L"Show this part's scan, and keep it showing through other commands such as Measure. "
+                            L"Click again to hide it.").Detach();
         break;
     case MENU_ID_TEST_SURFACE:
         *pToolTip = IsAlibreVersionSupported()
@@ -301,9 +305,19 @@ STDMETHODIMP CAddOnInterface::InvokeCommand(long menuID, BSTR sessionIdentifier,
 
     if (menuID == MENU_ID_SHOW_SCAN)
     {
-        if (IsAlibreVersionSupported() && IsPartSession(sessionIdentifier) && FindScan(sessionIdentifier) != nullptr)
-            return StartScanView(sessionIdentifier, pCommand);
-        return S_OK;
+        // A two-way toggle: a new one turns Show Scan on; returning the running
+        // one again turns it off.
+        const std::wstring sessionId = (sessionIdentifier != nullptr) ? sessionIdentifier : L"";
+        ScanDocument* pScan = FindScan(sessionId);
+        if (!IsAlibreVersionSupported() || !IsPartSession(sessionIdentifier) || pScan == nullptr)
+            return S_OK;
+        pScan->SetMillimetresPerUnit(MillimetresPerModelUnit(sessionId));
+        CScanDisplayCommand* pDisplay = ToggleScanDisplay(sessionId);
+        const HRESULT hr =
+            pDisplay->QueryInterface(__uuidof(IAlibreAddOnCommand), reinterpret_cast<void**>(pCommand));
+        Log(L"[display] Show Scan clicked (%s) hr=0x%08X", pDisplay->Site() != nullptr ? L"turning off" : L"turning on",
+            static_cast<unsigned>(hr));
+        return hr;
     }
 
     return S_OK;
@@ -449,9 +463,12 @@ STDMETHODIMP CAddOnInterface::LoadData(struct IStream* pCustomData, BSTR session
         return S_OK;
     }
 
-    AddScan(sessionId, MakeScanDocument(std::move(scan.mesh), scan.sourceName))->unsaved = false;
+    ScanDocument* pLoaded = AddScan(sessionId, MakeScanDocument(std::move(scan.mesh), scan.sourceName));
+    pLoaded->fitted = std::move(scan.features);
+    pLoaded->unsaved = false;
     ForgetUnreadData(sessionId);
-    Log(L"[load] the part's scan is %s; Show Scan draws it", ScanDisplayName(scan.sourceName).c_str());
+    Log(L"[load] the part's scan is %s, with %zu fitted planes and axes; Show Scan draws it",
+        ScanDisplayName(scan.sourceName).c_str(), pLoaded->fitted.size());
     return S_OK;
 }
 
@@ -473,6 +490,7 @@ STDMETHODIMP CAddOnInterface::SaveData(struct IStream* pCustomData, BSTR session
         scancore::ScanData scan;
         scan.mesh = pScan->mesh;
         scan.sourceName = pScan->sourceName;
+        scan.features = pScan->fitted;
         bytes = scancore::WriteScanData(scan);
     }
     else if (const std::string* pUnread = FindUnreadData(sessionId))

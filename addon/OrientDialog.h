@@ -29,10 +29,14 @@ protected:
     afx_msg void OnCentre();
     afx_msg void OnRotate();
     afx_msg void OnScale();
-    afx_msg void OnMode();
+    afx_msg void OnPickScan();
+    afx_msg void OnPickTarget();
+    afx_msg void OnSelectArea();
     afx_msg void OnGrowChanged();
     afx_msg void OnClearSelection();
     afx_msg void OnFitPlane();
+    afx_msg void OnFitAxis();
+    afx_msg void OnSelectCylinder();
     afx_msg void OnAlign();
     afx_msg void OnStartOver();
     afx_msg void OnUndo();
@@ -45,10 +49,17 @@ private:
     // Moves the scan, starting the alignment over (it no longer holds).
     void MoveScan(const scancore::Transform& transform, const CString& status);
     void ScanChanged();
+    // Pushes the button for mode down and the others up; pushing the one that's
+    // down puts all of them up.
+    void ToggleClickMode(int mode);
+    void ShowClickMode();
+    // Adds a fitted plane or axis, chooses it to align, and puts the buttons up.
+    void AddFitted(const scancore::Feature& feature, const CString& status);
 
     CComboBox m_rotateAxis;
     CComboBox m_rotatePivot;
     CComboBox m_scalePivot;
+    CComboBox m_axisToPlane;
 };
 
 // Called by the scan view when what Orient shows has changed.

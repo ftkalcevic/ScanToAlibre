@@ -7,6 +7,7 @@
 #include "Log.h"
 
 #include "OrientDialog.h"
+#include "ScanDisplayCommand.h"
 
 #include "Orient.h"
 #include "ViewProjection.h"
@@ -134,8 +135,15 @@ namespace
                 return;
             }
         }
-        const Point3 other = (std::fabs(plane.direction.x) < 0.9) ? Point3{ 1, 0, 0 } : Point3{ 0, 1, 0 };
-        u = scancore::Normalised(scancore::Cross(plane.direction, other));
+        // Otherwise along the box axis most nearly in the plane, laid into it, so a
+        // fitted plane's outline still lines up with the box.
+        int most = 0;
+        for (int k = 1; k < 3; ++k)
+            if (std::fabs(scancore::Dot(plane.direction, box.axes[k])) <
+                std::fabs(scancore::Dot(plane.direction, box.axes[most])))
+                most = k;
+        const Point3 along = box.axes[most] - plane.direction * scancore::Dot(box.axes[most], plane.direction);
+        u = scancore::Normalised(along);
         v = scancore::Cross(plane.direction, u);
     }
 
@@ -178,6 +186,27 @@ void RefreshScanViews()
 {
     for (CScanViewCommand* pView : g_views)
         pView->Refresh();
+    RefreshScanDisplays();
+}
+
+void RefreshAlibreButtons()
+{
+    static bool logged = false;
+    bool any = false;
+    for (CScanViewCommand* pView : g_views)
+    {
+        if (pView->Site() == nullptr)
+            continue;
+        const HRESULT hr = pView->Site()->UpdateToolbars();
+        any = true;
+        if (!logged)
+        {
+            logged = true;
+            Log(L"[changed] UpdateToolbars hr=0x%08X", static_cast<unsigned>(hr));
+        }
+    }
+    if (!any)
+        Log(L"[changed] no scan view running to refresh Alibre's buttons through");
 }
 
 CScanViewCommand::CScanViewCommand(const std::wstring& sessionId)
@@ -227,7 +256,8 @@ STDMETHODIMP CScanViewCommand::On3DRender()
         {
             try
             {
-                const ScanDocument::DrawArrays* pArrays = pScan->Arrays();
+                // Show Scan draws the scan while it's on; this draws only what's over it.
+                const ScanDocument::DrawArrays* pArrays = ScanDisplayOn(m_sessionId) ? nullptr : pScan->Arrays();
                 if (pArrays != nullptr)
                 {
                     // Hidden by the model, like a part, so features built on it show.
@@ -296,12 +326,16 @@ STDMETHODIMP CScanViewCommand::OnClick(long screenX, long screenY, enum ADDONMou
             ProbeScreenToWorld(screenX, screenY);
         }
         bool handled = false;
-        if (pScan->orienting)
-            handled = pScan->selectMode ? GrowAt(*pScan, screenX, screenY) : PickFeature(*pScan, screenX, screenY);
-        else
+        if (!pScan->orienting)
             handled = Pick(*pScan, screenX, screenY);
-        // A hit is ours; a miss is left to Alibre, which selects what's there
-        // (its planes, axes and points, read in OnSelectionChange while orienting).
+        else if (pScan->clickMode == ScanDocument::ClickMode::Scan)
+            handled = PickFeature(*pScan, screenX, screenY);
+        else if (pScan->clickMode == ScanDocument::ClickMode::Area ||
+                 pScan->clickMode == ScanDocument::ClickMode::Cylinder)
+            handled = GrowAt(*pScan, screenX, screenY);
+        // A hit is ours; anything else is left to Alibre, which selects what's
+        // there (with To down, its planes, axes and points become the target in
+        // OnSelectionChange).
         if (handled)
             *pHandled = VARIANT_TRUE;
     }
@@ -416,8 +450,10 @@ bool CScanViewCommand::GrowAt(ScanDocument& scan, long x, long y)
         return false;
 
     const auto start = std::chrono::steady_clock::now();
+    const bool cylinder = scan.clickMode == ScanDocument::ClickMode::Cylinder;
     const std::vector<int> area =
-        scancore::GrowFlatArea(scan.mesh, scan.Neighbours(), hit.triangle, scan.growAngle, scan.growDistance);
+        cylinder ? scancore::GrowCylinder(scan.mesh, scan.Neighbours(), hit.triangle, scan.growAngle, scan.growDistance)
+                 : scancore::GrowFlatArea(scan.mesh, scan.Neighbours(), hit.triangle, scan.growAngle, scan.growDistance);
     const bool remove = std::binary_search(scan.selection.begin(), scan.selection.end(), hit.triangle);
     std::vector<int> selection;
     if (remove)
@@ -426,9 +462,10 @@ bool CScanViewCommand::GrowAt(ScanDocument& scan, long x, long y)
     else
         std::set_union(scan.selection.begin(), scan.selection.end(), area.begin(), area.end(),
                        std::back_inserter(selection));
-    Log(L"[orient] %s %zu triangles grown from triangle %d (within %g degrees and %g mm); %zu selected, %.0f ms",
-        remove ? L"removed" : L"added", area.size(), hit.triangle, scan.growAngle, scan.growDistance, selection.size(),
-        Milliseconds(start));
+    Log(L"[orient] %s %zu triangles of a %s grown from triangle %d (within %g degrees and %g mm); %zu selected, "
+        L"%.0f ms",
+        remove ? L"removed" : L"added", area.size(), cylinder ? L"cylinder" : L"flat area", hit.triangle,
+        scan.growAngle, scan.growDistance, selection.size(), Milliseconds(start));
     scan.SetSelection(std::move(selection));
     OrientViewChanged();
     m_site->InvalidateCanvas();
@@ -491,7 +528,8 @@ STDMETHODIMP CScanViewCommand::OnSelectionChange()
     AFX_MANAGE_STATE(AfxGetStaticModuleState());
 
     ScanDocument* pScan = FindScan(m_sessionId);
-    if (pScan == nullptr || !pScan->orienting || pScan->selectMode || theApp.m_pRoot == nullptr)
+    if (pScan == nullptr || !pScan->orienting || pScan->clickMode != ScanDocument::ClickMode::Target ||
+        theApp.m_pRoot == nullptr)
         return S_OK;
 
     try

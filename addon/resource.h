@@ -36,8 +36,8 @@
 #define IDC_OR_SCALE                    13041
 #define IDC_OR_SCALE_PIVOT              13042
 #define IDC_OR_SCALE_APPLY              13043
-#define IDC_OR_MODE_PICK                13044
-#define IDC_OR_MODE_SELECT              13045
+#define IDC_OR_PICK_SCAN                13044
+#define IDC_OR_SELECT_AREA              13045
 #define IDC_OR_GROW_ANGLE               13046
 #define IDC_OR_GROW_DIST                13047
 #define IDC_OR_SELECTED                 13048
@@ -51,14 +51,18 @@
 #define IDC_OR_ALIGN                    13056
 #define IDC_OR_STATUS                   13057
 #define IDC_OR_UNDO                     13058
+#define IDC_OR_PICK_TARGET              13059
+#define IDC_OR_SELECT_CYLINDER          13060
+#define IDC_OR_FIT_AXIS                 13061
+#define IDC_OR_AXIS_PLANE               13062
 
 // Next default values for new objects
 //
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        13060
+#define _APS_NEXT_RESOURCE_VALUE        13070
 #define _APS_NEXT_COMMAND_VALUE         32771
-#define _APS_NEXT_CONTROL_VALUE         13060
-#define _APS_NEXT_SYMED_VALUE           13060
+#define _APS_NEXT_CONTROL_VALUE         13070
+#define _APS_NEXT_SYMED_VALUE           13070
 #endif
 #endif

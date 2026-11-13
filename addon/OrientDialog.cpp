@@ -34,6 +34,7 @@ namespace
         int rotatePivot = 1;        // the scan's centre
         double scale = 1;
         int scalePivot = 1;
+        int axisToPlane = 0;        // square to it
     };
     OrientChoices g_choices;
 
@@ -49,15 +50,15 @@ namespace
         return CString(std::wstring(text.begin(), text.end()).c_str());
     }
 
-    const wchar_t* StepText(int step)
+    CString StepText(const scancore::AlignState& state)
     {
-        switch (step)
-        {
-        case 0: return L"Step 1 of 3: a plane onto a plane, or an axis onto an axis. Turns and moves freely.";
-        case 1: return L"Step 2 of 3: turns only about what step 1 lined up, and slides along it.";
-        case 2: return L"Step 3 of 3: slides only, a plane onto a plane or a point onto a point.";
-        default: return L"All three steps are done. Start Over to align again.";
-        }
+        if (state.Done())
+            return L"Fully aligned. Start Over to align again.";
+        CString text;
+        text.Format(L"Step %d: a plane onto a plane, an axis onto an axis or a plane, or a point onto a point. "
+                    L"Still free: %s.",
+                    state.step + 1, static_cast<LPCWSTR>(Wide(scancore::FreedomText(state))));
+        return text;
     }
 }
 
@@ -73,12 +74,15 @@ BEGIN_MESSAGE_MAP(COrientDlg, CStepDialog)
     ON_BN_CLICKED(IDC_OR_CENTRE, &COrientDlg::OnCentre)
     ON_BN_CLICKED(IDC_OR_ROTATE, &COrientDlg::OnRotate)
     ON_BN_CLICKED(IDC_OR_SCALE_APPLY, &COrientDlg::OnScale)
-    ON_BN_CLICKED(IDC_OR_MODE_PICK, &COrientDlg::OnMode)
-    ON_BN_CLICKED(IDC_OR_MODE_SELECT, &COrientDlg::OnMode)
+    ON_BN_CLICKED(IDC_OR_PICK_SCAN, &COrientDlg::OnPickScan)
+    ON_BN_CLICKED(IDC_OR_PICK_TARGET, &COrientDlg::OnPickTarget)
+    ON_BN_CLICKED(IDC_OR_SELECT_AREA, &COrientDlg::OnSelectArea)
     ON_EN_CHANGE(IDC_OR_GROW_ANGLE, &COrientDlg::OnGrowChanged)
     ON_EN_CHANGE(IDC_OR_GROW_DIST, &COrientDlg::OnGrowChanged)
     ON_BN_CLICKED(IDC_OR_CLEAR, &COrientDlg::OnClearSelection)
     ON_BN_CLICKED(IDC_OR_FIT, &COrientDlg::OnFitPlane)
+    ON_BN_CLICKED(IDC_OR_FIT_AXIS, &COrientDlg::OnFitAxis)
+    ON_BN_CLICKED(IDC_OR_SELECT_CYLINDER, &COrientDlg::OnSelectCylinder)
     ON_BN_CLICKED(IDC_OR_ALIGN, &COrientDlg::OnAlign)
     ON_BN_CLICKED(IDC_OR_START_OVER, &COrientDlg::OnStartOver)
     ON_BN_CLICKED(IDC_OR_UNDO, &COrientDlg::OnUndo)
@@ -96,6 +100,9 @@ BOOL COrientDlg::OnInitDialog()
     m_rotateAxis.SubclassDlgItem(IDC_OR_ROT_AXIS, this);
     m_rotatePivot.SubclassDlgItem(IDC_OR_ROT_PIVOT, this);
     m_scalePivot.SubclassDlgItem(IDC_OR_SCALE_PIVOT, this);
+    m_axisToPlane.SubclassDlgItem(IDC_OR_AXIS_PLANE, this);
+    m_axisToPlane.AddString(L"square to it");
+    m_axisToPlane.AddString(L"lying in it");
     for (const wchar_t* axis : { L"X", L"Y", L"Z" })
         m_rotateAxis.AddString(axis);
     for (CComboBox* pPivot : { &m_rotatePivot, &m_scalePivot })
@@ -113,19 +120,20 @@ BOOL COrientDlg::OnInitDialog()
     m_rotatePivot.SetCurSel(c.rotatePivot);
     SetDlgItemText(IDC_OR_SCALE, Number(c.scale));
     m_scalePivot.SetCurSel(c.scalePivot);
+    m_axisToPlane.SetCurSel(c.axisToPlane);
 
     if (ScanDocument* pScan = FindScan(m_sessionId))
     {
         pScan->orienting = true;
         pScan->chosen = -1;
         pScan->haveTarget = false;
-        CheckRadioButton(IDC_OR_MODE_PICK, IDC_OR_MODE_SELECT,
-                         pScan->selectMode ? IDC_OR_MODE_SELECT : IDC_OR_MODE_PICK);
+        pScan->clickMode = ScanDocument::ClickMode::None;
         SetDlgItemText(IDC_OR_GROW_ANGLE, Number(pScan->growAngle));
         SetDlgItemText(IDC_OR_GROW_DIST, Number(pScan->growDistance));
     }
     RefreshScanViews();
     UpdateFromScan();
+    ShowClickMode();
     SetStatus(L"");
     return TRUE;
 }
@@ -146,7 +154,7 @@ void COrientDlg::UpdateFromScan()
 {
     ScanDocument* pScan = FindScan(m_sessionId);
     CString info, selected, scanFeature, target;
-    int step = 0;
+    scancore::AlignState align;
     if (pScan == nullptr)
     {
         info = L"This part has no scan. Load one first.";
@@ -161,22 +169,24 @@ void COrientDlg::UpdateFromScan()
         const std::vector<Feature> features = pScan->Features();
         scanFeature = (pScan->chosen >= 0 && pScan->chosen < static_cast<int>(features.size()))
                           ? Wide(features[pScan->chosen].name)
-                          : CString(L"(click one of the scan's planes, axes or its centre)");
-        target = pScan->haveTarget ? Wide(pScan->target.name) : CString(L"(click one of Alibre's planes, axes or points)");
-        step = pScan->align.step;
+                          : CString(L"(none: push Scan, then click the scan's plane, axis or centre)");
+        target = pScan->haveTarget ? Wide(pScan->target.name)
+                                   : CString(L"(none: push To, then click Alibre's plane, axis or point)");
+        align = pScan->align;
     }
     SetDlgItemText(IDC_OR_INFO, info);
     SetDlgItemText(IDC_OR_SELECTED, selected);
     SetDlgItemText(IDC_OR_SCAN_FEATURE, scanFeature);
     SetDlgItemText(IDC_OR_TARGET, target);
-    SetDlgItemText(IDC_OR_STEP, StepText(step));
+    SetDlgItemText(IDC_OR_STEP, StepText(align));
 
     const bool has = pScan != nullptr;
     for (int id : { IDC_OR_MOVE, IDC_OR_CENTRE, IDC_OR_ROTATE, IDC_OR_SCALE_APPLY, IDC_OR_START_OVER })
         GetDlgItem(id)->EnableWindow(has);
     GetDlgItem(IDC_OR_FIT)->EnableWindow(has && !pScan->selection.empty());
+    GetDlgItem(IDC_OR_FIT_AXIS)->EnableWindow(has && !pScan->selection.empty());
     GetDlgItem(IDC_OR_CLEAR)->EnableWindow(has && !pScan->selection.empty());
-    GetDlgItem(IDC_OR_ALIGN)->EnableWindow(has && pScan->chosen >= 0 && pScan->haveTarget && pScan->align.step < 3);
+    GetDlgItem(IDC_OR_ALIGN)->EnableWindow(has && pScan->chosen >= 0 && pScan->haveTarget && !pScan->align.Done());
     GetDlgItem(IDC_OR_UNDO)->EnableWindow(has && pScan->CanUndo());
 }
 
@@ -290,15 +300,65 @@ void COrientDlg::OnScale()
     MoveScan(Transform::Scaling(c.scale, pivot), status);
 }
 
-void COrientDlg::OnMode()
+void COrientDlg::OnPickScan()
+{
+    ToggleClickMode(static_cast<int>(ScanDocument::ClickMode::Scan));
+}
+
+void COrientDlg::OnPickTarget()
+{
+    ToggleClickMode(static_cast<int>(ScanDocument::ClickMode::Target));
+}
+
+void COrientDlg::OnSelectArea()
+{
+    ToggleClickMode(static_cast<int>(ScanDocument::ClickMode::Area));
+}
+
+void COrientDlg::OnSelectCylinder()
+{
+    ToggleClickMode(static_cast<int>(ScanDocument::ClickMode::Cylinder));
+}
+
+void COrientDlg::ToggleClickMode(int mode)
 {
     ScanDocument* pScan = FindScan(m_sessionId);
     if (pScan == nullptr)
         return;
-    pScan->selectMode = IsDlgButtonChecked(IDC_OR_MODE_SELECT) == BST_CHECKED;
-    SetStatus(pScan->selectMode ? L"Click a flat area of the scan to select it; click it again to take it away."
-                                : L"Click one of the scan's planes, axes or its centre, then Alibre's plane, axis "
-                                  L"or point to align it with.");
+    using Mode = ScanDocument::ClickMode;
+    const Mode pushed = static_cast<Mode>(mode);
+    pScan->clickMode = (pScan->clickMode == pushed) ? Mode::None : pushed;
+    ShowClickMode();
+    switch (pScan->clickMode)
+    {
+    case Mode::Scan:
+        SetStatus(L"Click one of the scan's planes, axes or its centre.");
+        break;
+    case Mode::Target:
+        SetStatus(L"Click one of Alibre's planes, axes or points (show them in the Design Explorer if they're "
+                  L"hidden).");
+        break;
+    case Mode::Area:
+        SetStatus(L"Click a flat area of the scan to select it; click a selected area to take it away.");
+        break;
+    case Mode::Cylinder:
+        SetStatus(L"Click a cylinder of the scan, outside or a hole, to select it; click a selected one to take it "
+                  L"away.");
+        break;
+    default:
+        SetStatus(L"Clicks in the view are Alibre's.");
+        break;
+    }
+}
+
+void COrientDlg::ShowClickMode()
+{
+    const ScanDocument* pScan = FindScan(m_sessionId);
+    const ScanDocument::ClickMode mode = (pScan != nullptr) ? pScan->clickMode : ScanDocument::ClickMode::None;
+    CheckDlgButton(IDC_OR_PICK_SCAN, mode == ScanDocument::ClickMode::Scan ? BST_CHECKED : BST_UNCHECKED);
+    CheckDlgButton(IDC_OR_PICK_TARGET, mode == ScanDocument::ClickMode::Target ? BST_CHECKED : BST_UNCHECKED);
+    CheckDlgButton(IDC_OR_SELECT_AREA, mode == ScanDocument::ClickMode::Area ? BST_CHECKED : BST_UNCHECKED);
+    CheckDlgButton(IDC_OR_SELECT_CYLINDER, mode == ScanDocument::ClickMode::Cylinder ? BST_CHECKED : BST_UNCHECKED);
 }
 
 void COrientDlg::OnGrowChanged()
@@ -347,21 +407,66 @@ void COrientDlg::OnFitPlane()
         SetStatus(L"A plane couldn't be fitted to that selection.");
         return;
     }
-    plane.name = "Plane " + std::to_string(pScan->fittedPlanes.size() + 1);
+    int planes = 0;
+    for (const Feature& f : pScan->fitted)
+        planes += (f.kind == Feature::Kind::Plane) ? 1 : 0;
+    plane.name = "Plane " + std::to_string(planes + 1);
     const size_t triangles = pScan->selection.size();
-    pScan->AddFittedPlane(plane);
-    pScan->SetSelection({});
-    pScan->chosen = static_cast<int>(pScan->Features().size()) - 1;
-    pScan->selectMode = false;
-    CheckRadioButton(IDC_OR_MODE_PICK, IDC_OR_MODE_SELECT, IDC_OR_MODE_PICK);
     Log(L"[orient] %S fitted to %zu triangles: point (%.3f, %.3f, %.3f), normal (%.4f, %.4f, %.4f), rms %.4f mm",
         plane.name.c_str(), triangles, plane.point.x, plane.point.y, plane.point.z, plane.direction.x,
         plane.direction.y, plane.direction.z, rms);
-    RefreshScanViews();
-    UpdateFromScan();
     CString status;
     status.Format(L"%s fitted to %zu triangles; they're %.3f mm from it on average (rms). It's chosen to align.",
                   static_cast<LPCWSTR>(Wide(plane.name)), triangles, rms);
+    AddFitted(plane, status);
+}
+
+void COrientDlg::OnFitAxis()
+{
+    AFX_MANAGE_STATE(AfxGetStaticModuleState());
+    ScanDocument* pScan = FindScan(m_sessionId);
+    if (pScan == nullptr || pScan->selection.empty())
+        return;
+
+    scancore::CylinderFit fit;
+    if (!scancore::FitCylinder(pScan->mesh, pScan->selection, fit))
+    {
+        SetStatus(L"An axis couldn't be fitted: select more of the cylinder, so its surface turns at least about "
+                  L"25 degrees.");
+        MessageBeep(MB_ICONWARNING);
+        return;
+    }
+    int axes = 0;
+    for (const Feature& f : pScan->fitted)
+        axes += (f.kind == Feature::Kind::Axis) ? 1 : 0;
+    char name[96];
+    sprintf_s(name, "Axis %d (diameter %.3f, %s)", axes + 1, 2.0 * fit.radius, fit.hole ? "hole" : "outside");
+    fit.axis.name = name;
+    const size_t triangles = pScan->selection.size();
+    Log(L"[orient] %S fitted to %zu triangles: point (%.3f, %.3f, %.3f), direction (%.4f, %.4f, %.4f), radius %.4f, "
+        L"rms %.4f mm",
+        fit.axis.name.c_str(), triangles, fit.axis.point.x, fit.axis.point.y, fit.axis.point.z, fit.axis.direction.x,
+        fit.axis.direction.y, fit.axis.direction.z, fit.radius, fit.rms);
+    CString status;
+    status.Format(L"%s fitted to %zu triangles; they're %.3f mm from the cylinder on average (rms). It's chosen to "
+                  L"align.",
+                  static_cast<LPCWSTR>(Wide(fit.axis.name)), triangles, fit.rms);
+    AddFitted(fit.axis, status);
+}
+
+void COrientDlg::AddFitted(const Feature& feature, const CString& status)
+{
+    ScanDocument* pScan = FindScan(m_sessionId);
+    if (pScan == nullptr)
+        return;
+    pScan->AddFitted(feature);
+    MarkPartChanged(m_sessionId, L"Plane or axis fitted. Changed by ScanToAlibre so the part saves it.");
+    pScan->SetSelection({});
+    pScan->chosen = static_cast<int>(pScan->Features().size()) - 1;
+    pScan->clickMode = ScanDocument::ClickMode::None;
+    ShowClickMode();
+    RefreshScanViews();
+    UpdateFromScan();
     SetStatus(status);
 }
 
@@ -380,7 +485,10 @@ void COrientDlg::OnAlign()
     Transform move;
     std::string message;
     const bool flip = IsDlgButtonChecked(IDC_OR_FLIP) == BST_CHECKED;
-    if (!scancore::AlignStep(scanFeature, pScan->target, flip, state, move, message))
+    g_choices.axisToPlane = m_axisToPlane.GetCurSel();
+    const scancore::AxisToPlane axisToPlane =
+        (g_choices.axisToPlane == 1) ? scancore::AxisToPlane::InPlane : scancore::AxisToPlane::Square;
+    if (!scancore::AlignStep(scanFeature, pScan->target, flip, axisToPlane, state, move, message))
     {
         SetStatus(Wide(message));
         MessageBeep(MB_ICONWARNING);
@@ -392,8 +500,9 @@ void COrientDlg::OnAlign()
     Log(L"[orient] step %d: %S onto %S%s", state.step, scanFeature.name.c_str(), pScan->target.name.c_str(),
         flip ? L", flipped" : L"");
     CString status;
-    status.Format(L"Step %d: %s lined up with %s.", state.step, static_cast<LPCWSTR>(Wide(scanFeature.name)),
-                  static_cast<LPCWSTR>(Wide(pScan->target.name)));
+    status.Format(L"Step %d: %s lined up with %s.%s%s", state.step, static_cast<LPCWSTR>(Wide(scanFeature.name)),
+                  static_cast<LPCWSTR>(Wide(pScan->target.name)), message.empty() ? L"" : L" ",
+                  static_cast<LPCWSTR>(Wide(message)));
     pScan->chosen = -1;
     pScan->haveTarget = false;
     CheckDlgButton(IDC_OR_FLIP, BST_UNCHECKED);
