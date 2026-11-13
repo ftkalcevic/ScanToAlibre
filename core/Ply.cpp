@@ -124,7 +124,8 @@ namespace scancore
         return true;
     }
 
-    bool ParsePly(const std::string& bytes, Mesh& mesh, std::string& message, PlyReadInfo* pInfo)
+    bool ParsePly(const std::string& bytes, Mesh& mesh, std::string& message, PlyReadInfo* pInfo,
+                  std::vector<Point3>* pNormals)
     {
         mesh = Mesh();
         PlyReadInfo info;
@@ -217,14 +218,16 @@ namespace scancore
             const bool isVertex = (element.name == "vertex");
             const bool isFace = (element.name == "face");
             int ix = -1, iy = -1, iz = -1, indices = -1;
-            int normals = 0;
+            int inx = -1, iny = -1, inz = -1;
             for (size_t p = 0; p < element.properties.size(); ++p)
             {
                 const std::string& name = element.properties[p].name;
                 if (name == "x") ix = static_cast<int>(p);
                 else if (name == "y") iy = static_cast<int>(p);
                 else if (name == "z") iz = static_cast<int>(p);
-                else if (name == "nx" || name == "ny" || name == "nz") ++normals;
+                else if (name == "nx") inx = static_cast<int>(p);
+                else if (name == "ny") iny = static_cast<int>(p);
+                else if (name == "nz") inz = static_cast<int>(p);
                 else if ((name == "vertex_indices" || name == "vertex_index") && element.properties[p].list)
                     indices = static_cast<int>(p);
             }
@@ -237,8 +240,14 @@ namespace scancore
                 }
                 sawVertices = true;
                 info.vertices = element.count;
-                info.hasNormals = (normals == 3);
+                info.hasNormals = (inx >= 0 && iny >= 0 && inz >= 0);
                 mesh.vertices.reserve(element.count);
+                if (pNormals != nullptr)
+                {
+                    pNormals->clear();
+                    if (info.hasNormals)
+                        pNormals->reserve(element.count);
+                }
             }
             if (isFace)
             {
@@ -291,6 +300,8 @@ namespace scancore
                 if (isVertex)
                 {
                     mesh.vertices.push_back({ values[ix], values[iy], values[iz] });
+                    if (pNormals != nullptr && info.hasNormals)
+                        pNormals->push_back({ values[inx], values[iny], values[inz] });
                 }
                 else if (isFace)
                 {
@@ -324,11 +335,12 @@ namespace scancore
         return true;
     }
 
-    bool ReadPly(const std::filesystem::path& path, Mesh& mesh, std::string& message, PlyReadInfo* info)
+    bool ReadPly(const std::filesystem::path& path, Mesh& mesh, std::string& message, PlyReadInfo* info,
+                 std::vector<Point3>* normals)
     {
         std::string bytes;
         if (!ReadFileBytes(path, bytes, message))
             return false;
-        return ParsePly(bytes, mesh, message, info);
+        return ParsePly(bytes, mesh, message, info, normals);
     }
 }

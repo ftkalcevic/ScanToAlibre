@@ -207,7 +207,7 @@ STDMETHODIMP CAddOnInterface::MenuItemToolTip(long menuID, BSTR* pToolTip)
         *pToolTip = _bstr_t(L"ScanToAlibre add-on").Detach();
         break;
     case MENU_ID_LOAD:
-        *pToolTip = _bstr_t(L"Step 1: load a scan (STL, or PLY with faces) into this part and show it. It's saved "
+        *pToolTip = _bstr_t(L"Step 1: load a scan (STL, or PLY: a mesh, or a point cloud with normals, which is made into a mesh) into this part and show it. It's saved "
                             L"inside the part when you save the part. Left-click on the scan to pick points; "
                             L"F switches full detail, C clears the points. Parts only.").Detach();
         break;

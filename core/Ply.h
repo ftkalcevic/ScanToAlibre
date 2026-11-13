@@ -8,6 +8,7 @@
 
 #include <filesystem>
 #include <string>
+#include <vector>
 
 #include "Mesh.h"
 
@@ -24,8 +25,11 @@ namespace scancore
 
     // A file with vertices but no faces is a point cloud: it reads, with no
     // triangles, and the caller decides what to do with it.
-    bool ParsePly(const std::string& bytes, Mesh& mesh, std::string& message, PlyReadInfo* info = nullptr);
-    bool ReadPly(const std::filesystem::path& path, Mesh& mesh, std::string& message, PlyReadInfo* info = nullptr);
+    // normals, if given, gets each vertex's nx, ny and nz when the file has them.
+    bool ParsePly(const std::string& bytes, Mesh& mesh, std::string& message, PlyReadInfo* info = nullptr,
+                  std::vector<Point3>* normals = nullptr);
+    bool ReadPly(const std::filesystem::path& path, Mesh& mesh, std::string& message, PlyReadInfo* info = nullptr,
+                 std::vector<Point3>* normals = nullptr);
 
     // Whole-file reading shared by the readers.
     bool ReadFileBytes(const std::filesystem::path& path, std::string& bytes, std::string& message);

@@ -14,12 +14,14 @@ namespace scancore
         std::string description;    // such as "binary STL" or "PLY binary_little_endian"
         size_t fileTriangles = 0;   // triangles (STL) or faces (PLY) as stored
         size_t degenerate = 0;      // left out
-        bool pointCloud = false;    // a PLY with no faces
+        bool pointCloud = false;    // a PLY with no faces, meshed by ReconstructSurface
         bool hasNormals = false;
+        size_t points = 0;          // a point cloud's
+        double cellSize = 0.0;      // mm, the mesh's grid for a point cloud
     };
 
-    // Point clouds aren't loaded yet (they'll be made into a mesh): one returns
-    // false with info.pointCloud set and a message saying so.
+    // A PLY point cloud (vertices with normals, no faces) is made into a mesh
+    // (Reconstruct); one without normals returns false with a message.
     bool ReadScanFile(const std::filesystem::path& path, Mesh& mesh, ScanFileInfo& info, std::string& message);
 
     // The same, from the file's bytes and name (only its extension is used).

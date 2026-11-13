@@ -176,7 +176,7 @@ bool LoadScan(const std::wstring& sessionId)
 
     CWnd* pParent = (owner != nullptr) ? CWnd::FromHandle(owner) : nullptr;
     CFileDialog dialog(TRUE, L"stl", nullptr, OFN_FILEMUSTEXIST | OFN_HIDEREADONLY,
-                       L"Scans (*.stl;*.ply)|*.stl;*.ply|STL meshes (*.stl)|*.stl|PLY meshes (*.ply)|*.ply|"
+                       L"Scans (*.stl;*.ply)|*.stl;*.ply|STL meshes (*.stl)|*.stl|PLY meshes and point clouds (*.ply)|*.ply|"
                        L"All files (*.*)|*.*||",
                        pParent);
     dialog.m_ofn.lpstrTitle = L"Load Scan";
@@ -201,9 +201,13 @@ bool LoadScan(const std::wstring& sessionId)
                       MB_OK | (info.pointCloud ? MB_ICONINFORMATION : MB_ICONERROR));
         return false;
     }
-    Log(L"[scan] read %s: %s, %zu triangles or faces in the file, %zu degenerate left out, normals %d, in %.0f ms",
-        path.c_str(), Widen(info.description).c_str(), info.fileTriangles, info.degenerate, info.hasNormals ? 1 : 0,
-        Milliseconds(start));
+    if (info.pointCloud)
+        Log(L"[scan] read %s: %s, %zu points meshed on a %.4f mm grid into %zu triangles, in %.0f ms", path.c_str(),
+            Widen(info.description).c_str(), info.points, info.cellSize, mesh.triangles.size(), Milliseconds(start));
+    else
+        Log(L"[scan] read %s: %s, %zu triangles or faces in the file, %zu degenerate left out, normals %d, in %.0f ms",
+            path.c_str(), Widen(info.description).c_str(), info.fileTriangles, info.degenerate,
+            info.hasNormals ? 1 : 0, Milliseconds(start));
 
     ScanDocument* pScan = AddScan(sessionId, MakeScanDocument(std::move(mesh), Narrow(path)));
     ForgetUnreadData(sessionId);

@@ -6,6 +6,7 @@
 #include <cctype>
 
 #include "Ply.h"
+#include "Reconstruct.h"
 
 namespace scancore
 {
@@ -31,7 +32,8 @@ namespace scancore
         if (extension == ".ply")
         {
             PlyReadInfo ply;
-            if (!ParsePly(bytes, mesh, message, &ply))
+            std::vector<Point3> normals;
+            if (!ParsePly(bytes, mesh, message, &ply, &normals))
                 return false;
             info.description = "PLY " + ply.format;
             info.fileTriangles = ply.faces;
@@ -40,11 +42,21 @@ namespace scancore
             if (mesh.triangles.empty())
             {
                 info.pointCloud = true;
-                message = "This PLY file is a point cloud (" + std::to_string(mesh.vertices.size()) +
-                          " points, no faces). Making a mesh from a point cloud isn't built yet; load a mesh "
-                          "(STL, or PLY with faces) for now.";
-                mesh = Mesh();
-                return false;
+                info.points = mesh.vertices.size();
+                if (!ply.hasNormals)
+                {
+                    message = "This PLY file is a point cloud (" + std::to_string(mesh.vertices.size()) +
+                              " points) without normals. Making a mesh needs each point's normal (nx, ny, nz); "
+                              "export the cloud with normals, or load a mesh.";
+                    mesh = Mesh();
+                    return false;
+                }
+                const std::vector<Point3> points = std::move(mesh.vertices);
+                ReconstructResult made;
+                if (!ReconstructSurface(points, normals, ReconstructOptions(), mesh, message, &made))
+                    return false;
+                info.cellSize = made.cellSize;
+                info.description = "PLY point cloud (" + ply.format + "), meshed";
             }
             return true;
         }

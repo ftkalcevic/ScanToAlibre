@@ -27,7 +27,7 @@ From `AlibreX_64.tlh` and `AlibreAddOn_64.tlh`, all unproven:
 
 The ScanToAlibre ribbon tab's buttons are the steps, in order:
 
-1. **Load:** reads a scan into the part: STL, and PLY (meshes, and point clouds, which are made into a mesh when loaded; Frank chose that over drawing points as small discs). The scan is saved inside the part, in the `.AD_PRT`, through Alibre's add-on data stream (Frank chose that over a file beside the part). Loading into a part that has a scan asks before replacing it.
+1. **Load:** reads a scan into the part: STL, and PLY (meshes, and point clouds with normals, which are made into a mesh when loaded; Frank chose that over drawing points as small discs). The mesh is made by a signed distance from the points' tangent planes (Hoppe et al. 1992, Gaussian weighted) on a grid as fine as the points' spacing (coarser for very large clouds), drawn through by surface nets; the surface reaches across gaps between a scanner's lines of points but not past the scan's edges or into holes, so areas the scanner didn't see stay open (Frank is fine with the holes). A cloud without normals is refused for now. The scan is saved inside the part, in the `.AD_PRT`, through Alibre's add-on data stream (Frank chose that over a file beside the part). Loading into a part that has a scan asks before replacing it.
 2. **Refine** (Frank asked for a better name than Fix): a modeless dialog that changes the scan straight away, with Undo (up to five changes back).
    - **Decimate:** fewer triangles, to a number or a percent of now, optionally stopping before the surface moves more than a set distance, and optionally keeping open edges in place. Quadric edge collapse (Garland and Heckbert).
    - **Smooth:** a choice of Laplacian (simple; shrinks the shape), Taubin (keeps the size) and Bilateral (bilateral normal filtering; keeps sharp edges, the default for machined parts), with passes, a strength from 0 to 1, and keeping open edges in place.
@@ -58,7 +58,6 @@ Only one of the workflow's dialogs is open at a time (Frank's rule): opening one
 ## Open questions
 
 - Mostly mechanical or organic parts. That decides whether whole freeform bodies are in version 1.
-- How point clouds are made into meshes on Load (surface reconstruction: ball pivoting, Poisson, or another method).
 - What else Refine offers besides decimating and smoothing (filling holes, removing loose pieces, removing spikes).
 - Whether the add-on also gets a Design Explorer tab (to restart the scan view after native commands).
 

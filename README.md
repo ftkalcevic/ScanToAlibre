@@ -4,7 +4,7 @@ An add-on for Alibre Design that helps turn a 3D scan (an STL mesh or a point cl
 
 Status: early. The add-on gets its own **ScanToAlibre** ribbon tab, whose buttons are the workflow, in order. In a part:
 
-1. **Load** reads a scan (STL, or PLY with faces) and shows it in the view. The scan is saved inside the part when you save the part. Left-click on it to pick points. F switches between full detail and simplified, and C clears the picked points.
+1. **Load** reads a scan (STL, or PLY: a mesh, or a point cloud with normals, which it makes into a mesh) and shows it in the view. The scan is saved inside the part when you save the part. Left-click on it to pick points. F switches between full detail and simplified, and C clears the picked points.
 2. **Refine** decimates the scan to fewer triangles and smooths it (Laplacian, Taubin or Bilateral), in a dialog that stays open while you work. Changes apply straight away; Undo takes them back.
 3. **Orient** moves, rotates and scales the scan, fits planes to flat areas, and lines it up with the part's planes, axes and origin in 3-2-1 steps, using a box fitted to the scan with its centre planes and axes.
 

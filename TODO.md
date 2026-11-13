@@ -2,7 +2,7 @@
 
 - Answer the spec's open questions.
 - Decide whether Load still needs the `ScanToAlibre` parameter now that `HasPersistentDataToSave` lights Save.
-- Load PLY point clouds by making a mesh from them (Frank's choice).
+- Point clouds without normals: estimate the normals.
 - Test Refine in Alibre.
 - Refine: decide what else it offers (filling holes, removing loose pieces and spikes), and whether long runs need a progress bar.
 - Test that fitted planes and axes come back when the part is opened again.

@@ -104,7 +104,7 @@ TEST_CASE("binary PLY meshes are read in either byte order, past other propertie
     }
 }
 
-TEST_CASE("a PLY point cloud reads with no triangles, and Load says it isn't supported yet")
+TEST_CASE("a PLY point cloud reads with no triangles; Load meshes one with normals and refuses one without")
 {
     const std::string text =
         "ply\nformat ascii 1.0\nelement vertex 3\n"
@@ -119,7 +119,25 @@ TEST_CASE("a PLY point cloud reads with no triangles, and Load says it isn't sup
     ScanFileInfo info;
     CHECK_FALSE(ParseScanFile(text, "cloud.PLY", mesh, info, message));
     CHECK(info.pointCloud);
-    CHECK(message.find("point cloud") != std::string::npos);
+    CHECK(message.find("without normals") != std::string::npos);
+
+    // A flat patch of points facing up, with normals, becomes a mesh.
+    std::string cloud = "ply\nformat ascii 1.0\nelement vertex 1271\n"
+                        "property float x\nproperty float y\nproperty float z\n"
+                        "property float nx\nproperty float ny\nproperty float nz\nend_header\n";
+    for (int i = 0; i <= 40; ++i)
+        for (int j = 0; j <= 30; ++j)
+            cloud += std::to_string(i * 0.5) + " " + std::to_string(j * 0.5) + " 0 0 0 1\n";
+    std::vector<Point3> normals;
+    REQUIRE(ParsePly(cloud, mesh, message, nullptr, &normals));
+    CHECK(normals.size() == 1271);
+    CHECK(normals[5].z == 1.0);
+    REQUIRE(ParseScanFile(cloud, "cloud.ply", mesh, info, message));
+    CHECK(info.pointCloud);
+    CHECK(info.points == 1271);
+    CHECK(info.cellSize > 0.0);
+    CHECK(mesh.triangles.size() > 1000);
+    CHECK(SurfaceArea(mesh) == doctest::Approx(300.0).epsilon(0.1));
 }
 
 TEST_CASE("broken PLY files are refused with a reason")
