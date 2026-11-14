@@ -765,8 +765,143 @@ void DrawScanFeature(IADAddOnCanvasDisplay* pCanvas, const ScanDocument& scan, c
     }
 }
 
+namespace
+{
+    // A fitted segment in the world, arcs and circles every 3 degrees.
+    std::vector<Point3> SegmentWorldPoints(const scancore::ProfileSegment& seg, const scancore::SectionFrame& frame)
+    {
+        const double kPi = 3.14159265358979323846;
+        if (seg.kind == scancore::ProfileSegment::Kind::Line)
+            return { frame.ToWorld(seg.start), frame.ToWorld(seg.end) };
+        double from = 0.0, sweep = 2.0 * kPi;
+        if (seg.kind == scancore::ProfileSegment::Kind::Arc)
+        {
+            from = std::atan2(seg.start.y - seg.centre.y, seg.start.x - seg.centre.x);
+            const double to = std::atan2(seg.end.y - seg.centre.y, seg.end.x - seg.centre.x);
+            sweep = to - from;
+            if (seg.anticlockwise && sweep < 0.0)
+                sweep += 2.0 * kPi;
+            else if (!seg.anticlockwise && sweep > 0.0)
+                sweep -= 2.0 * kPi;
+        }
+        std::vector<Point3> points;
+        const int steps = (std::max)(2, static_cast<int>(std::ceil(std::fabs(sweep) / (3.0 * kPi / 180.0))));
+        for (int k = 0; k <= steps; ++k)
+        {
+            const double a = from + sweep * k / steps;
+            points.push_back(
+                frame.ToWorld({ seg.centre.x + seg.radius * std::cos(a), seg.centre.y + seg.radius * std::sin(a) }));
+        }
+        return points;
+    }
+
+    void Marker(IADAddOnCanvasDisplay* pCanvas, __int64 segment, const Point3& p, double unit, long size,
+                MarkerType type)
+    {
+        pCanvas->DrawMarker(segment, static_cast<float>(p.x / unit), static_cast<float>(p.y / unit),
+                            static_cast<float>(p.z / unit), size, type);
+    }
+}
+
+void CScanViewCommand::DrawSeries(IADAddOnCanvasDisplay* pCanvas, ScanDocument& scan)
+{
+    const ScanDocument::Series& series = scan.series;
+    if (!series.plane.havePlane)
+        return;
+    const double unit = scan.MillimetresPerUnit();
+    const scancore::SectionFrame& frame = series.plane.frame;
+    using scancore::Vec2;
+    auto world = [&](const Vec2& p) { return frame.ToWorld(p); };
+
+    // The base plane: a square a little bigger than the scan, round the scan's centre.
+    const scancore::Box3& b = scan.bounds;
+    const double half = 0.6 * scancore::Length(b.high - b.low);
+    const Vec2 middle = frame.ToPlane(b.Centre());
+    const __int64 planeSegment = AddSegment(pCanvas, L"Series plane", 245, 200, 40, true);
+    DrawPolyline(pCanvas, planeSegment,
+                 { world({ middle.x - half, middle.y - half }), world({ middle.x + half, middle.y - half }),
+                   world({ middle.x + half, middle.y + half }), world({ middle.x - half, middle.y + half }),
+                   world({ middle.x - half, middle.y - half }) },
+                 unit);
+
+    const scancore::SeriesResult& r = series.result;
+    const int chosen = series.chosenRow;
+    // Every row's slice thin red, the chosen row's thicker.
+    const __int64 sliceSegment = AddSegment(pCanvas, L"Series slices", 220, 50, 50, true);
+    const __int64 chosenSegment = AddSegment(pCanvas, L"Series chosen slice", 220, 50, 50, true);
+    pCanvas->SetLineWeight(chosenSegment, 3.0f);
+    for (size_t s = 0; s < r.slices.size(); ++s)
+        for (const scancore::SlicePolyline& slice : r.slices[s].section.slices)
+        {
+            std::vector<Point3> points = slice.points;
+            if (slice.closed && !points.empty())
+                points.push_back(points.front());
+            DrawPolyline(pCanvas, static_cast<int>(s) == chosen ? chosenSegment : sliceSegment, points, unit);
+        }
+
+    // The chosen row's fit, green: its loft splines with their points (the
+    // start bigger, so the seam shows), or its lines and arcs.
+    if (chosen >= 0 && static_cast<size_t>(chosen) < r.slices.size())
+    {
+        const scancore::SeriesSlice& slice = r.slices[chosen];
+        const __int64 fitSegment = AddSegment(pCanvas, L"Series fit", 40, 190, 70, true);
+        pCanvas->SetLineWeight(fitSegment, 2.0f);
+        const __int64 pointSegment = AddSegment(pCanvas, L"Series spline points", 40, 190, 70, true);
+        std::vector<bool> lofted(slice.section.slices.size(), false);
+        if (series.options.loft)
+            for (const scancore::SeriesChain& chain : r.chains)
+            {
+                if (static_cast<size_t>(chosen) < chain.firstSlice ||
+                    static_cast<size_t>(chosen) >= chain.firstSlice + chain.polyline.size())
+                    continue;
+                const size_t k = static_cast<size_t>(chosen) - chain.firstSlice;
+                lofted[chain.polyline[k]] = true;
+                if (chain.splines)
+                {
+                    std::vector<Point3> points;
+                    for (const Vec2& p : scancore::ClosedSplineCurve(chain.spline[k], 6))
+                        points.push_back(slice.frame.ToWorld(p));
+                    if (!points.empty())
+                        points.push_back(points.front());
+                    DrawPolyline(pCanvas, fitSegment, points, unit);
+                    for (size_t i = 0; i < chain.spline[k].size(); ++i)
+                        Marker(pCanvas, pointSegment, slice.frame.ToWorld(chain.spline[k][i]), unit, i == 0 ? 12 : 5,
+                               i == 0 ? MarkerType_MARKER_ASTERISK : MarkerType_MARKER_CROSSHAIR);
+                }
+                else
+                {
+                    for (const scancore::ProfileSegment& seg : chain.profiles[k].segments)
+                        DrawPolyline(pCanvas, fitSegment, SegmentWorldPoints(seg, slice.frame), unit);
+                    if (!chain.profiles[k].segments.empty())
+                        Marker(pCanvas, pointSegment, slice.frame.ToWorld(chain.profiles[k].segments[0].start), unit,
+                               12, MarkerType_MARKER_ASTERISK);
+                }
+            }
+        for (size_t k = 0; k < slice.section.profiles.size(); ++k)
+            if (!lofted[k])
+                for (const scancore::ProfileSegment& seg : slice.section.profiles[k].segments)
+                    DrawPolyline(pCanvas, fitSegment, SegmentWorldPoints(seg, slice.frame), unit);
+    }
+
+    // The guide curves, darker green, straight between their points.
+    if (series.options.loft && series.options.guides)
+    {
+        const __int64 guideSegment = AddSegment(pCanvas, L"Series guides", 20, 120, 40, true);
+        pCanvas->SetLineWeight(guideSegment, 2.0f);
+        for (const scancore::SeriesChain& chain : r.chains)
+            for (const std::vector<Point3>& guide : chain.guides)
+                DrawPolyline(pCanvas, guideSegment, guide, unit);
+    }
+}
+
+
 void CScanViewCommand::DrawSection(IADAddOnCanvasDisplay* pCanvas, ScanDocument& scan)
 {
+    if (scan.seriesing)
+    {
+        DrawSeries(pCanvas, scan);
+        return;
+    }
     const ScanDocument::Section* pSection = scan.ActiveSection();
     if (pSection == nullptr || !pSection->havePlane)
         return;

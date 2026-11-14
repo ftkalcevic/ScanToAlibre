@@ -9,9 +9,10 @@ Status: early. The add-on gets its own **ScanToAlibre** ribbon tab. First is **S
 3. **Orient** moves, rotates and scales the scan, fits planes to flat areas, and lines it up with the part's planes, axes and origin in 3-2-1 steps, using a box fitted to the scan with its centre planes and axes.
 
 4. **Section** slices the scan with an Alibre plane or face, or one of the scan's planes, fits lines and arcs to the slice, and makes an Alibre sketch of them, constrained (horizontal, vertical, tangent, concentric) with rounded radii, and the slice itself as construction lines. Extrude or revolve it with Alibre's own commands.
-5. **Surface** fits a B-spline surface to areas of the scan you select (smooth areas or a brush), as heights over a base plane, optionally symmetric across XY, YZ or ZX and trimmed to the whole scan's outline or the selection's, or the rectangle round the selection or round the scan's box, made bigger by an offset if asked, and inserts it into the part to extrude up to.
-6. **Silhouette** makes a sketch of the scan's outline seen along a plane's normal, with every separate piece and through-hole, fitted and constrained as Section's are. It catches tabs and flanges that a slice at one height misses.
-7. **Compare** colours the scan by its distance from the part as built so far (blues inside, green within a tolerance, yellow to red outside, grey where the part isn't modelled yet), with statistics, and Probe reads the distance where you click.
+5. **Section Series** slices the scan at a list of planes offset from one plane and makes a sketch at each, for lofting: with Create Loft, every slice of a shape gets a closed spline with the same number of points (or the same lines and arcs) starting at matching places, and guide curves join the matching points. It then makes a loft through the sketches with the guides.
+6. **Surface** fits a B-spline surface to areas of the scan you select (smooth areas or a brush), as heights over a base plane, optionally symmetric across XY, YZ or ZX and trimmed to the whole scan's outline or the selection's, or the rectangle round the selection or round the scan's box, made bigger by an offset if asked, and inserts it into the part to extrude up to.
+7. **Silhouette** makes a sketch of the scan's outline seen along a plane's normal, with every separate piece and through-hole, fitted and constrained as Section's are. It catches tabs and flanges that a slice at one height misses.
+8. **Compare** colours the scan by its distance from the part as built so far (blues inside, green within a tolerance, yellow to red outside, grey where the part isn't modelled yet), with statistics, and Probe reads the distance where you click.
 
 Then **About**.
 

@@ -112,6 +112,7 @@
     <ClCompile Include="OrientDialog.cpp" />
     <ClCompile Include="CompareDialog.cpp" />
     <ClCompile Include="SectionDialog.cpp" />
+    <ClCompile Include="SectionSeriesDialog.cpp" />
     <ClCompile Include="SurfaceDialog.cpp" />
     <ClCompile Include="SketchWriter.cpp" />
     <ClCompile Include="RefineDialog.cpp" />
@@ -135,6 +136,7 @@
     <ClInclude Include="OrientDialog.h" />
     <ClInclude Include="CompareDialog.h" />
     <ClInclude Include="SectionDialog.h" />
+    <ClInclude Include="SectionSeriesDialog.h" />
     <ClInclude Include="SurfaceDialog.h" />
     <ClInclude Include="SketchWriter.h" />
     <ClInclude Include="RefineDialog.h" />

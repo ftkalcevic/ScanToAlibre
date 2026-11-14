@@ -118,14 +118,29 @@
 #define IDC_SCAN_TREE                   13135
 #define ID_SCAN_RENAME                  13136
 #define ID_SCAN_DELETE                  13137
+#define IDD_SECTION_SERIES              13138
+#define IDC_SER_FIRST                   13139
+#define IDC_SER_LAST                    13140
+#define IDC_SER_COUNT                   13141
+#define IDC_SER_MAKE                    13142
+#define IDC_SER_LIST                    13143
+#define IDC_SER_ADD                     13144
+#define IDC_SER_DELETE                  13145
+#define IDC_SER_LOFT                    13146
+#define IDC_SER_SPLINES                 13147
+#define IDC_SER_LINES_ARCS              13148
+#define IDC_SER_GUIDES                  13149
+#define IDC_SER_RESULT                  13150
+#define IDC_SER_CREATE                  13151
+#define IDC_SER_STATUS                  13152
 
 // Next default values for new objects
 //
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        13138
+#define _APS_NEXT_RESOURCE_VALUE        13153
 #define _APS_NEXT_COMMAND_VALUE         32771
-#define _APS_NEXT_CONTROL_VALUE         13138
-#define _APS_NEXT_SYMED_VALUE           13138
+#define _APS_NEXT_CONTROL_VALUE         13153
+#define _APS_NEXT_SYMED_VALUE           13153
 #endif
 #endif

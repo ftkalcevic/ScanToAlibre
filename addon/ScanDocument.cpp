@@ -152,8 +152,48 @@ void ScanDocument::SetSelection(std::vector<int> triangles)
     selectionArrays.reset();
 }
 
+void ScanDocument::UpdateSeries()
+{
+    Series& s = series;
+    s.result = scancore::SeriesResult();
+    if (!s.plane.havePlane)
+        return;
+    const scancore::Point3 normal = scancore::Normalised(s.plane.normal);
+    const scancore::SectionFrame base = scancore::FrameForPlane(s.plane.point, normal);
+    s.plane.frame = base;
+    if (!s.haveRange || scancore::Length(s.rangePoint - s.plane.point) > 1e-9 ||
+        scancore::Length(s.rangeNormal - normal) > 1e-9)
+    {
+        scancore::DefaultSeriesRange(mesh, base, s.first, s.last);
+        s.first = scancore::RoundTo(s.first, 0.01);
+        s.last = scancore::RoundTo(s.last, 0.01);
+        s.offsets = scancore::EvenOffsets(s.first, s.last, s.count);
+        s.haveRange = true;
+        s.rangePoint = s.plane.point;
+        s.rangeNormal = normal;
+        s.rangeFromPick = true;
+        s.chosenRow = -1;
+    }
+    if (!scancore::ValidateOffsets(s.offsets, s.invalid))
+        return;
+    scancore::SeriesOptions options = s.options;
+    options.tolerance = s.plane.tolerance;
+    options.fitArcs = s.plane.snap.fitArcs;
+    s.result = scancore::SliceSeries(mesh, base, s.offsets, options);
+    Log(L"[series] %S along (%.4f, %.4f, %.4f): %zu planes, %S; %zu chains, %zu open polylines, %.2f s",
+        s.plane.planeName.c_str(), normal.x, normal.y, normal.z, s.offsets.size(),
+        scancore::DescribeRuns(s.result).c_str(), s.result.chains.size(), s.result.openPolylines, s.result.seconds);
+    for (const std::string& note : s.result.notes)
+        Log(L"[series] %S", note.c_str());
+}
+
 void ScanDocument::UpdateSection()
 {
+    if (seriesing)
+    {
+        UpdateSeries();
+        return;
+    }
     Section* pSection = ActiveSection();
     if (pSection == nullptr)
         return;

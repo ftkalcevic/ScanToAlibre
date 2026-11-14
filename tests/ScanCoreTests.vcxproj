@@ -74,6 +74,7 @@
     <ClCompile Include="OrientTests.cpp" />
     <ClCompile Include="ReconstructTests.cpp" />
     <ClCompile Include="SectionTests.cpp" />
+    <ClCompile Include="SectionSeriesTests.cpp" />
     <ClCompile Include="RefineTests.cpp" />
     <ClCompile Include="ScanCoreTests.cpp" />
     <ClCompile Include="ScanFileTests.cpp" />

@@ -19,6 +19,7 @@
 #include "Mesh.h"
 #include "Orient.h"
 #include "Section.h"
+#include "SectionSeries.h"
 #include "Silhouette.h"
 #include "SurfaceFit.h"
 
@@ -109,12 +110,40 @@ struct ScanDocument
         s.kind = Section::Kind::Silhouette;
         return s;
     }();
-    // The open one of the two, or nullptr.
-    Section* ActiveSection() { return silhouetting ? &silhouette : (sectioning ? &section : nullptr); }
-    bool Sectioning() const { return sectioning || silhouetting; }
+    // Section Series: slices at a list of offsets from one plane, matched for
+    // lofting. Its plane is picked as Section's is, through series.plane (a
+    // Section whose offset stays 0), so the view's picking serves both.
+    struct Series
+    {
+        Section plane;
+        std::vector<double> offsets;            // mm along the plane's normal, going up
+        double first = 0.0, last = 0.0;        // Make's range
+        int count = 10;
+        scancore::SeriesOptions options;        // tolerance and fitArcs come from plane
+        scancore::SeriesResult result;          // empty when the offsets aren't valid
+        std::string invalid;                    // why the offsets aren't valid, UTF-8
+        int chosenRow = -1;                     // drawn highlighted
+        // The plane the range was made for: a new plane makes the list again.
+        bool haveRange = false;
+        scancore::Point3 rangePoint, rangeNormal;
+        bool rangeFromPick = false;             // a plane was just picked and the list made for it
+        int made = 0;                           // series made so far, for names
+    };
+    bool seriesing = false;
+    Series series;
+
+    // The open one of Section, Silhouette and Section Series' plane, or nullptr.
+    Section* ActiveSection()
+    {
+        return silhouetting ? &silhouette : (sectioning ? &section : (seriesing ? &series.plane : nullptr));
+    }
+    bool Sectioning() const { return sectioning || silhouetting || seriesing; }
     // Slices (or outlines) and fits the open one again (after the plane,
-    // offset, tolerance or scan changes).
+    // offset, tolerance or scan changes). For Section Series, the whole series.
     void UpdateSection();
+    // Section Series: slices the whole series again. A plane other than the
+    // one the list was made for makes the list again from the scan's extent.
+    void UpdateSeries();
     // Sets section's symmetry line in frame: where the first symmetry plane
     // square to the frame meets it (fitted planes named "Symmetry plane" or
     // "Mid plane", then world planes Detect found), or none.

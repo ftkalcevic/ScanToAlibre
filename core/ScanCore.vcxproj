@@ -72,6 +72,7 @@
     <ClCompile Include="Ply.cpp" />
     <ClCompile Include="Reconstruct.cpp" />
     <ClCompile Include="Section.cpp" />
+    <ClCompile Include="SectionSeries.cpp" />
     <ClCompile Include="ScanData.cpp" />
     <ClCompile Include="ScanFile.cpp" />
     <ClCompile Include="Silhouette.cpp" />
@@ -92,6 +93,7 @@
     <ClInclude Include="Ply.h" />
     <ClInclude Include="Reconstruct.h" />
     <ClInclude Include="Section.h" />
+    <ClInclude Include="SectionSeries.h" />
     <ClInclude Include="ScanData.h" />
     <ClInclude Include="ScanFile.h" />
     <ClInclude Include="Silhouette.h" />

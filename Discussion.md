@@ -4034,3 +4034,496 @@ Decisions are also recorded in the spec (`docs\SPEC.md`) and `CLAUDE.md`.
 ### 🤖 Claude
 
 > Fixing a stray character in the icon path in CLAUDE.md, then rebuilding the discussion.
+
+> Thanks. `CLAUDE.md` now records two items as tested by you in Alibre on 14 November:
+>
+> - the Show Scan button's new image and its move to first place on the ribbon
+> - the Scan tab's tree
+>
+> I read "Test ok" as covering both. Tell me if the tree still needs testing and I'll change it back.
+>
+> I also fixed the icon's path in that file: a stray character had turned it into `addones\ShowScan.ico`, and it now reads `addon\res\ShowScan.ico`.
+>
+> `Discussion.md` is rebuilt, and nothing is committed.
+
+### 🧑 Frank · 18:55
+
+> Lets implement the new Section Series.  Checkbox for optional - Optimise for Loft (default on), and Create Guide Curves. (default on).  We will start with a selected plane and autogenerate offset planes.  This will be in a list, so the user can change the offsets.  Offsets can be negative, but must always be in order.
+
+### 🤖 Claude
+
+> Before I build, two things need sorting out.
+>
+> **Clash with the other session.** This session was forked part way through the Scan tab tree work. The [original session](#local_19b6a7fd-a394-4636-8aa6-3d9d142b7534) has half-finished, unbuilt edits in `ScanDocument`, `ScanViewCommand`, the scan data format and `resource.h`. Section Series has to touch `resource.h`, the `.rc`, `ScanDocument` and the menus too. If both sessions edit them at once, one will overwrite the other's work.
+>
+> **Product decisions.** A few things aren't in the spec yet, so I've put them as questions.
+
+> Questions:
+> - The forked-from session has unfinished Scan tab edits in the same files Section Series needs (resource.h, .rc, ScanDocument). How should I proceed?
+>   - Finish tab first (Recommended): Let the original session finish and build the Scan tab tree; I start Section Series after that's done.
+>   - Separate worktree: Build Section Series on its own git branch/worktree now, merged later (resource IDs and .rc may conflict).
+>   - Plan only for now: I write the design into docs\PLAN-next.md now, no code until the tree is done.
+> - With Optimise for Loft on, how should each slice be drawn in Alibre?
+>   - One spline per slice (Recommended): Each closed slice becomes one spline with the same number of points in every sketch, matched start and direction. Lofts cleanly; no lines or arcs.
+>   - Matched lines and arcs: Keep lines/arcs but force the same segment count and order in every slice. Harder, and fails where a slice changes shape.
+> - What should Create Guide Curves make?
+>   - 3D sketch through points (Recommended): A 3D sketch spline through matching points (e.g. the matched corners or 4 evenly spaced points) of every slice, for the loft to use as guides.
+>   - 2D sketches on a cross plane: Silhouette-style curves on a plane along the series (only works where guides lie in one plane).
+> - Where does Section Series live?
+>   - New ribbon step (Recommended): Its own dialog, e.g. '8 Section Series', reusing Section's plane picking, tolerance and Sketch Options.
+>   - Inside 4 Section: A 'Series' mode in the existing Section dialog, with the offsets list added.
+
+### 🧑 Frank · 18:58
+
+> Answers:
+> - The forked-from session has unfinished Scan tab edits in the same files Section Series needs (resource.h, .rc, ScanDocument). How should I proceed?
+>   **Plan only for now**
+> - With Optimise for Loft on, how should each slice be drawn in Alibre?
+>   **Both, with radio buttons - Fit Spline, or Use lines and Arcs**
+> - What should Create Guide Curves make?
+>   **3D sketch through points (Recommended)**
+> - Where does Section Series live?
+>   **New Dialog,**
+
+### 🤖 Claude
+
+> I've written the plan to [docs/PLAN-section-series.md](docs/PLAN-section-series.md). There's no code yet: building waits until the [original session](#local_19b6a7fd-a394-4636-8aa6-3d9d142b7534) finishes the Scan tab tree, because both need the same files.
+>
+> **Dialog and ribbon**
+> - **Ribbon:** the numbers come off every button, and Section Series sits next to Section.
+> - **Plane:** you pick it with the same one-shot Pick buttons as Section.
+> - **Offsets:** First and Last (defaulting to the scan's extent, less 2% of it at each end) and a Count. Make fills the list evenly. You can edit an offset in place, and Add / Delete rows. Offsets can be negative, and one that breaks the order is refused.
+> - **Options:** Optimise for Loft (on), with radio buttons for Fit Spline or Use lines and Arcs, and Create Guide Curves (on). Sketch Options are the same as in Section.
+> - **Create Sketches:** one 2D sketch per offset on its own design plane. With guides on, it also makes a 3D sketch with a spline through each set of matching points.
+>
+> **Matching slices for the loft**
+> - Each slice's loops are paired with the next slice's by centroid and area.
+> - Where the loop count changes (a boss starts, a hole closes), the series is split into runs. Each run is matched on its own and the split is reported.
+> - **Fit Spline:** every loop runs the same way and starts at matching corners. Every loop in a run gets the same number of points, with samples landing exactly on corners.
+> - **Lines and arcs:** finds the corners common to every slice, then splits segments so each stretch between corners has the same count in every slice. Splitting doesn't move the curve.
+> - **Guide curves** run through the matched corners, or through 4 evenly spaced points on round shapes.
+>
+> **Still to prove in Alibre 27.0.1:** whether a 2D interpolating spline closes smoothly, the point layout and units, and whether a 3D sketch spline works as a loft guide. I'll check these first on a throwaway part before writing the real code. Lofting itself stays with you in Alibre.
+
+### 🧑 Frank · 19:01
+
+> Plan approved
+
+### 🤖 Claude
+
+> I've marked the plan approved in [docs/PLAN-section-series.md](docs/PLAN-section-series.md).
+>
+> I haven't started the code yet. The Scan tab tree looks built: the DLL is from 6:45 PM, a minute after the last change to its code. But the original session may still be finishing or fixing it, and Section Series edits the same files (`resource.h`, the `.rc`, `ScanDocument`). Once it's finished, I'll start by proving the spline and 3D sketch calls on a throwaway part, then build the core matching and its tests.
+
+### 🧑 Frank · 19:02
+
+> Yes, start building
+
+*(Frank stopped Claude here.)*
+
+### 🧑 Frank · 19:02
+
+> Start building the section series functionality
+
+### 🤖 Claude
+
+> Writing the core next; first checking how the scan view picks and draws Section's plane so Section Series can share it.
+
+> Read enough. Writing `core\SectionSeries` now: slicing at each offset, matching loops across slices into runs, then Fit Spline / lines-and-arcs matching and guide points.
+
+> Tidying two loops in the lines-and-arcs matching that I wrote clumsily.
+
+> Now the tests.
+
+> Core and tests are written; building them now.
+
+> Two checks fail: a square slice comes back as 8 segments, not 4. Checking what Section's own `FitProfile` gives on that slice.
+
+> The slices of my test boxes have only one point per side between corners, which Section's fit reads as arcs. Real scans are dense, so I'll give the test meshes points along each side.
+
+> A square still gives one segment per slice point, so something in my input to `FitProfile` is off. Printing a slice to see.
+
+> All six core tests pass. Running the skipped replay on Frank's `mt12cover` scan to see real runs and timing.
+
+> Now the ribbon: dropping the numbers and adding Section Series after Section.
+
+> Ribbon done. Adding a small core helper to move profiles from a slice's frame into a sketch's own axes (tested), then the dialog.
+
+> Now `ScanDocument`: a `Series` that reuses Section's plane picking through `ActiveSection()`.
+
+> Editing that much through scripts is error-prone; I'll rewrite `SketchWriter.cpp` whole, keeping Section's code as it was, just split into functions.
+
+> Checking the 3D sketch calls I used against the 27.0.1 headers.
+
+> `Sketches3D` is on `IADPartSession`, not the design session; fixing that.
+
+> Now the dialog: resource IDs, template, and `CSectionSeriesDlg`.
+
+> Replacing a stray line: reslicing inside the list's end-edit notice would rebuild the list mid-notice, so I'll post a message and reslice after it returns.
+
+> Adding the new files to the project, then the drawing.
+
+> The shell tripped on the inline script; I'll put it in a scratch file instead.
+
+> Everything builds with no new warnings. Running the full test suite and checking whether Alibre is open before installing.
+
+> Alibre is closed, so installing (the script asks for administrator rights).
+
+> Installed. Now the docs: CLAUDE.md, the spec, README and the plan, including the places that name ribbon buttons by number.
+
+> Docs updated. Rebuilding both projects' `Discussion.md`, as each CLAUDE.md asks at the end of a turn.
+
+> Section Series is built in ScanToAlibre (following `docs\PLAN-section-series.md`) and installed, but none of it has been run in Alibre yet. The core tests pass (101 of 101, six of them new) and the whole solution builds with only the usual warnings. Nothing is committed.
+>
+> **What's there**
+> - **Ribbon:** the numbers are gone from every button, and Section Series sits after Section.
+> - **Dialog:**
+>   - You pick the plane as in Section. Picking one sets First and Last to the scan's extent less 2% at each end, and fills the list with 10 planes.
+>   - You can edit an offset in place with a double-click or F2. An offset that breaks the order is refused and the old value stays.
+>   - Make, Add and Delete work on the list.
+>   - The other options are Optimise for Loft with Fit Spline or Use lines and Arcs, Create Guide Curves, and Section's fit and Sketch Options.
+>   - Choosing a row draws its slice and fit in the view, and the guide curves are drawn too.
+> - **Core** (`core\SectionSeries`): slices at each offset, matches loops from slice to slice into runs, and fits each loop either way.
+> - **Writing:** each plane gets its own sketch and design plane. Section's sketch-writing code is now shared between Section and Section Series, with the same behaviour as before.
+> - **`mt12cover`, 10 planes:**
+>   - Fit Spline: one run, 256 points a slice, within 0.026 mm, in 0.32 s.
+>   - Use lines and Arcs: it falls back to splines there, because no corner shows up in every slice. That's what the plan says to do, but it makes lines and arcs useless on this scan. The question below is whether to start each slice at the matched point and split segments to match instead.
+>
+> **Changes from the plan**
+> - **One 3D sketch per guide curve**, not one holding them all. Alibre's API docs say a loft's guide curves must each be a 3D sketch.
+> - **Symmetric isn't offered yet** for the series.
+> - **Neighbouring slices' loops now pair if their areas differ by up to 25 times.** I started at 4, but that split `mt12cover`'s tapering ends into runs of their own.
+> - **Tiny loops aren't matched.** They're written plain, with a count in the result line.
+>
+> **Not yet confirmed in Alibre:** whether the 2D spline closes smoothly where it starts (I close it by repeating the first point), the layout of the point arrays, whether the loft accepts these 3D sketches as guides, and whether typing into the list reaches the edit box or Alibre takes the keys.
+>
+> **To test in Alibre** (restart it first):
+> 1. The ribbon has no numbers, and Section Series is next to Section.
+> 2. Pick a plane and check the list fills. Edit an offset, including a negative one and one out of order, which should be refused. Then try Add and Delete.
+> 3. Choose rows and check their slice, fit and spline points draw. The start point is the larger marker.
+> 4. Create Sketches with Fit Spline and guides on, then loft through the sketches with the guides.
+> 5. Do the same with Use lines and Arcs.
+> 6. Untick Optimise for Loft and check you get plain Section sketches at each offset.
+> 7. On `mt12`, check the runs reported in the result line, and look in the log for `[series]` lines.
+>
+> The spec, README, `CLAUDE.md` and the plan are updated. ScanToAlibre has no help page yet, so there's none to change.
+
+### 🧑 Frank · 19:34
+
+> The planes were created, but no sketch when optimise for loft is selected.  Sketches are created when optimise for loft is turned off.
+
+### 🤖 Claude
+
+> Alibre is open, so I'll look at the part with the Alibre tools (read-only).
+
+> The part is closed now, so I can't look at what Series 1 left. Checking whether the Alibre tools can make an interpolated spline, so I can reproduce it on a throwaway part.
+
+> A throwaway part (not saved): a sketch with a closed spline, its first point repeated as my code does.
+
+> Both splines work through the MCP add-on, closed one included. So the difference is in how I call it. Looking at how MCPForAlibre adds a spline.
+
+> MCPForAlibre makes splines the same way, so the call itself is fine. My series used 256 points a spline; trying that size.
+
+> Everything I try works in a throwaway part: a 256-point closed spline, construction lines first, then a spline. Checking the log between your two runs for anything else that happened.
+
+> Nothing in the log or my reproduction explains it, so I'm closing the throwaway part (not saved) and need to look at your part itself.
+
+> I haven't found the cause yet. The add-on reported success, which doesn't match what you're seeing.
+>
+> **What the log says.** Your Optimise for Loft run at 19:30:32 was "Scan Series 1". Alibre took every call without refusing any:
+> - 10 sketches
+> - 10 splines
+> - 675 construction lines (the raw slices)
+> - 4 guide curves
+>
+> That run had **Use lines and Arcs** chosen. Your scan has no corner common to every slice, so it fell back to splines. Each sketch should therefore hold one closed spline plus the slice as construction lines. There are no ordinary lines or arcs, so nothing in it would look like a normal sketch.
+>
+> **What I tried.** I opened a throwaway part with the Alibre tools, then closed it without saving. The same spline call worked there, each tried in its own sketch:
+> - an open spline
+> - a closed spline with its first point repeated, as my code does
+> - a 256-point closed spline, the size your scan got
+> - a sketch given construction lines first and then a spline
+>
+> So the call itself works, which leaves something about your part or how the sketches show up.
+>
+> It would help to know:
+> - Do any "Scan Series 1.x" sketches appear in the Design Explorer at all, or only the "Scan Series 1.x plane" planes?
+> - Do the "Scan Series 1 guide …" 3D sketches appear?
+> - If you open the part again, I can list its sketches and their figures with the Alibre tools, without changing anything.
+
+### 🧑 Frank · 19:39
+
+> It's open now
+
+### 🤖 Claude
+
+> The part has the ten "Scan Series 1.x plane" planes but no sketches at all (not Series 2's either). Checking when it was saved, to know whether Series 2 was ever in this file.
+
+### 🧑 Frank · 19:40
+
+> I didn't save series 2.  Series 2 was recreated
+
+### 🤖 Claude
+
+> Noted: Series 1 was made again after reopening, and its planes are there but its sketches aren't. That fits the same cause. Making the change now.
+
+> Moving the splines ahead of the other edits, and making `WriteProfiles` skip any edit that would add nothing.
+
+> Built without errors. A quick look at the reworked spots to be sure the braces landed right.
+
+> The splines now go in first, and no edit is ever empty. Adding the finding to CLAUDE.md as unproven (it's my reading of the evidence, not yet confirmed), then installing once Alibre is closed.
+
+> Your part has all ten "Scan Series 1.x plane" planes but no sketches. That fits the most likely cause, but it isn't confirmed: the fix is built and the core tests pass, but it isn't installed or tested in Alibre yet.
+>
+> **Likely cause:** With Optimise for Loft on, every loop goes into a spline. That left the first edit of each new sketch with nothing to add. Alibre seems to delete a new sketch whose first edit ends empty, the same way its own interface drops an empty sketch. After that, every later call (construction lines, the spline) still reported success against the deleted sketch. That's why the log counted 10 sketches and 10 splines, and you saw none.
+>
+> With loft off, the first edit always adds lines and arcs, so the sketches stay. The same spline calls worked in a throwaway part, including a 256-point closed spline, which supports this explanation.
+>
+> **Fix** in `addon\SketchWriter.cpp`:
+> - The splines are added first, so a sketch's first edit always has something in it.
+> - An edit with nothing to add is skipped.
+> - A slice with nothing to write gets no plane or sketch.
+>
+> I've recorded this in CLAUDE.md as unproven.
+>
+> **To test once it's installed:**
+> 1. Restart Alibre and open `scan mt12`. You can delete the Series 1 planes left from before.
+> 2. With Optimise for Loft on, run Create Sketches with Fit Spline, then again with Use lines and Arcs. Check that the sketches appear, each with a closed spline and the slice as construction lines, plus the guide 3D sketches.
+> 3. Check where each spline closes: is it smooth or kinked? That's still unproven.
+> 4. With loft off, check you still get plain sketches.
+
+### 🧑 Frank · 19:42
+
+> Closed, install it
+
+### 🤖 Claude
+
+> The fix is installed: the installed `ScanToAlibre.dll` matches the build. It hasn't been tested in Alibre yet.
+>
+> To test:
+> 1. Open Alibre and `scan mt12`. You can delete the old "Scan Series 1.x plane" planes.
+> 2. With Optimise for Loft on and Fit Spline chosen, press Create Sketches. Each "Scan Series n.k" sketch should have a closed spline, with the slice as construction lines. The "Scan Series n guide …" 3D sketches should be there too.
+> 3. Do the same with Use lines and Arcs. On this scan it still falls back to splines.
+> 4. Check where each spline closes: is it smooth or kinked?
+> 5. With loft off, check you still get the plain sketches.
+>
+> If sketches are still missing, leave the part open and I'll look at it with the Alibre tools.
+
+### 🧑 Frank · 19:46
+
+> That's fixed it.  The spline was smooth.
+>
+> Change the "Optimise for Loft" to "Create Loft".  When that is selected, the "Create Sketches" button is "Create Loft".  This will create the sketches and guides as it does now, but will also create a loft, selecting the sketches in the correct order, and adding the guide lines.
+
+### 🤖 Claude
+
+> Now the edits: remember each slice's sketch and each chain's guides, then loft each run after the guides.
+
+> Now the dialog: the check box label, the button text, and the result line.
+
+> Built cleanly. Updating the other places that say "Optimise for Loft".
+
+> Recording in CLAUDE.md what your test proved, and the loft.
+
+> Alibre is closed, so installing.
+
+> Optimise for Loft is now **Create Loft**, and it makes the loft as well. It's built and installed, but the loft hasn't been run in Alibre yet. The core tests still pass.
+>
+> **What changed**
+> - **Check box and button:** The check box is now **Create Loft**. While it's ticked, the button reads **Create Loft**; unticked, it reads Create Sketches.
+> - **The loft:** The button makes the sketches and guide curves as before, then a loft boss, "Scan Series n loft r", for each run of slices. The sketches go in slice order, with that run's guide curves. A run of only one slice gets no loft.
+> - **Guide setting:** The guides use Alibre's **Global** setting. That's my choice; Alibre also offers Local and Tangent.
+> - **If Alibre refuses the guides,** it makes the loft again without them, and the result line says so. If the loft is refused outright, the result line gives Alibre's reason.
+> - **Create Fitted Sketch** must be ticked for a loft, because the loft goes through the fitted splines. If it isn't, the result line says why there's no loft.
+> - **Records:** Your test results are now noted as proven in CLAUDE.md: the empty-sketch fix works and the closed spline is smooth. The spec, README and plan describe Create Loft.
+>
+> **Not yet tested in Alibre:**
+> - Whether Alibre will loft through sketches that hold a spline plus construction lines.
+> - Whether it accepts the 3D sketches as guides.
+>
+> **To test** (restart Alibre first):
+> 1. The check box reads Create Loft. The button reads Create Loft when it's ticked and Create Sketches when it isn't.
+> 2. On `scan mt12`, press Create Loft with Fit Spline and Create Guide Curves ticked. You should get the sketches, the guides, and "Scan Series n loft 1". Check whether the result line says the guides were dropped.
+> 3. Untick Create Guide Curves and try again: the loft should be made without guides.
+> 4. If a loft is refused, the reason is in the result line and in the log's `[series]` lines.
+
+### 🧑 Frank · 20:03
+
+> Splines are working.  But if I select lines and arcs, I still get splines
+
+### 🤖 Claude
+
+> That's the fallback I flagged last time. Your `mt12` scan has no corner that shows up in every slice, and when that happens and the slices fit with different numbers of segments, the plan said to fall back to splines. I'll take your report as a request for lines and arcs there. The new way, for when no corner is common to every slice:
+>
+> - Start each slice at the point at the same angle round the centre as the previous slice's start, splitting a segment there if needed. That's how the splines keep their seam straight.
+> - Gather where every slice's joins fall, as a fraction of the way round. Joins within 2% of each other count as the same place.
+> - Split each slice's lines and arcs at the places it lacks. Splitting never moves the curve.
+>
+> That way every slice has the same segments in the same places, and segment k lines up with segment k in the next slice.
+
+> Also, a slice that fits as one whole circle among slices that don't can be turned into two half arcs, rather than falling back to splines.
+
+> You've hit your 5-hour limit · resets 10:40pm (Australia/Sydney)
+
+## 2026-11-15
+
+### 🧑 Frank · 00:01
+
+> I hit my usage limit while you were working, but it has reset now. Please continue from where you left off.
+
+### 🤖 Claude
+
+> Picking up where I left off: the core change is written. Adding a test for it, then building and running the tests.
+
+> All tests pass. Now the `mt12cover` replay, which used to fall back to splines.
+
+> The installer is waiting on its administrator prompt, which needs your approval. Meanwhile I'm updating the spec and CLAUDE.md.
+
+> You were getting splines because your `mt12` scan has no corner that shows up in every slice. In that case it fell back to splines, which is what the plan said to do. Now it makes lines and arcs instead. The change is built and the tests pass, but it isn't installed yet: the installer is waiting for you to approve its administrator prompt.
+>
+> **What happens now when no corner is common to every slice:**
+> - Each slice starts at the point at the same angle round the centre as the previous slice's start, splitting a segment there if needed. This is how the splines keep their seam straight.
+> - The joins of all the slices are gathered by how far round the loop they are. Joins within 2% of the way round count as the same place.
+> - Each slice is split wherever it has no join of its own. Splitting never moves the curve, so the tolerance holds, and segment k lines up with segment k in the next slice.
+> - A slice that fits as one whole circle among slices that don't is turned into two half arcs.
+> - It falls back to splines only if the segment counts still differ, and the result line says so.
+>
+> **On `mt12cover`** you now get 47 segments a slice, all within 0.05 mm, plus 4 guide curves. That's more segments than any single slice needs, because every slice is split wherever another slice has a join. I added a test that goes from an ellipse to a circle (no corners, a different number of arcs per slice, the last slice a whole circle). The spec and CLAUDE.md are updated. Nothing is committed.
+>
+> **To test, once it's installed and Alibre is restarted:**
+> 1. On `scan mt12`, choose Use lines and Arcs: the result line should no longer say it's fitted as splines.
+> 2. Choose a row: the slice should be drawn in lines and arcs, with the start marked by the larger marker, which should be in about the same place on each row.
+> 3. Press Create Loft: each sketch should get lines and arcs, then the guides and the loft. Check whether Alibre makes the loft through 47 segments per slice.
+> 4. Check that Fit Spline still works as before.
+
+### 🧑 Frank · 05:52
+
+> <task-notification>
+> <task-id>bu3ebro15</task-id>
+> <tool-use-id>toolu_012v89t1ZPheQcQohm7Kmnhg</tool-use-id>
+> <output-file>C:\Users\FRANKT~1\AppData\Local\Temp\claude\af67b47206b29857\c2a3e7b5-7bf9-4d57-ba12-a9d07d83bd21\tasks\bu3ebro15.output</output-file>
+> <status>completed</status>
+> <summary>Background command "Install the add-on and confirm it matches" completed (exit code 0)</summary>
+> </task-notification>
+
+### 🤖 Claude
+
+> The new lines-and-arcs matching is now installed. The installed `ScanToAlibre.dll` matches the build (960,000 bytes, 12:02 AM). It hasn't been tried in Alibre yet; restart Alibre before running the test list in my last message.
+
+### 🧑 Frank · 05:59
+
+> That didn't work well.  A lot of what should have been small arcs have appear as full circles, making invalid sketches.  Sketch "Scan Series 1.2" was the first fail.
+
+### 🤖 Claude
+
+> Looking at the log for that run, then reproducing it in the core replay to find which arcs go wrong.
+
+> Now the loft retry.
+
+> A broken loft should be deleted only when there's a retry to make. If there's nothing left to try, it's better to leave it so you can see Alibre's error on it.
+
+> Built, and the tests pass. Alibre is open, so the install has to wait. Recording this in CLAUDE.md first.
+
+> I've found what most likely broke Scan Series 1.2, and I've made a fix. It's built and the core tests pass, but it isn't installed yet because Alibre is open.
+>
+> **What happened.** I listed the figures in Scan Series 1.2. The top edge of the slice is one large arc of radius 219 mm, which I'd split into ten pieces, some only 0.07–0.3° long.
+> - Figure 34 had become an arc from (13.049, 1.716) back to the same point. Alibre draws that as a full 360° circle, so the sketch had two loops and the loft refused it.
+> - The geometry I write has no zero-length piece. Replaying `mt12` along Z, the shortest piece is 0.24 mm.
+> - But each piece got a radius dimension rounded to 219.1, plus tangent and coincident constraints with its neighbours: 285 constraints and 12 dimensions on 34 figures. Fitting the pieces to the rounded radius, Alibre's solver most likely shrank one tiny piece to nothing.
+>
+> **Fix 1: matched loft sections keep their fitted shape.** Sketches that will be lofted are now written with their ends joined, but no rounded radii, tangents, or horizontal and vertical constraints. Loft sections have to stay exactly as fitted so they match each other, and rounding a 219 mm arc does nothing useful. Profiles that aren't part of a loft still get Section's full design intent. That's my choice, so say if you'd rather keep some constraints on the loft sketches.
+>
+> **Fix 2: the retry without guides.** The failed loft wasn't simply refused. Alibre made it with an error, and that used up the sketches, so the retry without guides got "Sketch is already consumed". Now that broken loft is deleted before the retry. If the retry fails too, its loft stays, so you can see Alibre's error on it.
+>
+> **To test, once it's installed and Alibre is restarted:**
+> 1. In `scan mt12`, choose Use lines and Arcs and press Create Loft.
+> 2. Check that every sketch is one closed loop, with no full circles. The sketches should have joined ends but no radius dimensions.
+> 3. Check that the loft is made, and whether the result line says the guides were dropped.
+> 4. Check that Fit Spline with Create Loft still works.
+
+### 🧑 Frank · 06:06
+
+> Closed, install it
+
+### 🤖 Claude
+
+> The installer is running and will ask for administrator rights; please approve its prompt. I'll confirm when it's done.
+
+### 🧑 Frank · 06:08
+
+> <task-notification>
+> <task-id>bpqewb4c5</task-id>
+> <tool-use-id>toolu_017vt6LenBfyYGSGxKGK4ENk</tool-use-id>
+> <output-file>C:\Users\FRANKT~1\AppData\Local\Temp\claude\af67b47206b29857\c2a3e7b5-7bf9-4d57-ba12-a9d07d83bd21\tasks\bpqewb4c5.output</output-file>
+> <status>completed</status>
+> <summary>Background command "Install the add-on if Alibre is closed" completed (exit code 0)</summary>
+> </task-notification>
+
+### 🤖 Claude
+
+> The fix is installed: the installed `ScanToAlibre.dll` matches the build (964,096 bytes, 6:03 AM). It hasn't been tested in Alibre yet; restart Alibre and run the test list from my last message.
+
+### 🧑 Frank · 06:17
+
+> The loft is producing an error - ACISERROR_INVALID_BODY_RESULT:  Operation - The Feature results in an invalid Body.
+>
+> I rebuilt the loft by hand.  Adding sketch "scan series 2.10" causes the problem.
+
+### 🤖 Claude
+
+> Looking at sketches 2.9 and 2.10 in your part to see how the last one differs.
+
+> Both sketches are clean single loops. So the problem is likely how 2.10's segments line up with 2.9's. Comparing their figures.
+
+> Slice 10 is small: about 8 × 1.5 mm, starting on its right end at (3.91, −1.53) and running anticlockwise. Checking where slice 9 starts and how big it is.
+
+> I found what's different about slice 10, and it isn't a bug in the sketch itself. Both sketches are single closed loops with no gaps, overlaps or crossings. The problem is where slice 10 sits relative to slice 9, in the sketch's own axes:
+>
+> | | X | Y | Size |
+> |---|---|---|---|
+> | Scan Series 2.9 | −10.9 to 10.9 | 0.75 to 4.16 | about 22 × 3.4 mm |
+> | Scan Series 2.10 | −4.0 to 3.9 | −2.61 to −1.07 | about 8 × 1.5 mm |
+>
+> Slice 10 lies wholly below slice 9: the two outlines don't overlap at all when you look along the series. It's a much smaller shape, about 3.5 mm to one side. That's near the end of the scan, where the cover's outline changes abruptly, and slice 10 seems to catch the end of the part rather than a continuation of the shell. A loft from 9 to 10 has to swing sideways over a short distance, so it folds through itself. That's the ACIS "invalid body".
+>
+> The matching let it through because its test is loose: centroids within the two loops' sizes of each other, and areas within 25 times. That's what kept `mt12`'s tapering ends in the same run earlier.
+>
+> **Options:**
+> 1. **Don't change the code.** Delete row 10, or set Last a little further in, and press Create Loft again.
+> 2. **A new matching rule:** a loop only continues a run if its outline overlaps the previous slice's outline seen along the series. Slice 10 would then start a run of its own, so it gets a sketch but no loft. The result line would say "slices 1 to 9: 1 loop; slice 10: 1 loop", so you'd see why.
+> 3. **A warning only:** keep the matching as it is, and have the result line warn when neighbouring sections don't overlap.
+>
+> I recommend option 2. A loft between sections that don't overlap at all almost always fails or folds, so it's better to stop the run there and say so. This changes how runs are formed, so I'll wait for your choice.
+
+### 🧑 Frank · 06:24
+
+> #3 a warning when pressing create loft.  Recommend to the user to either remove the small section, or add more planes to morph slowly.
+
+### 🤖 Claude
+
+> I'll add the check to the core: for each followed shape, look at each pair of neighbouring slices and ask whether their outlines overlap, seen along the series. Pressing Create Loft then warns about any pair that doesn't, names the smaller section, and recommends removing it or adding planes. It also asks whether to make the loft anyway, with No as the default.
+
+> The core check works and all tests pass. Now the warning on Create Loft.
+
+> Built cleanly, and Alibre is closed, so installing (please approve the administrator prompt). Meanwhile I'm updating the docs.
+
+> The warning is built and installed, and the installed DLL matches the build. The core tests pass, but it hasn't been tried in Alibre yet.
+>
+> **What it does:** When you press Create Loft, it checks each pair of neighbouring sections in a shape. If two don't overlap at all, seen along the series, it warns you before making anything. The warning:
+> - lists each pair, for example "planes 9 and 10: plane 10's section is 5.1 times smaller";
+> - recommends either removing the small section (choose it and press Delete) or adding more planes between the two (choose the first and press Add, more than once if need be), so the shape changes slowly;
+> - asks "Make the loft anyway?", with **No** as the default.
+>
+> On No, nothing is made and the result line repeats the advice. On Yes, everything is made as before. Each pair is also written to the log.
+>
+> Sections overlap if a point of one lies inside the other, or if their edges cross, which catches two thin outlines crossing like a plus sign. A new test covers that, plus a tube that jumps sideways between two slices. The spec and CLAUDE.md are updated, and nothing is committed.
+>
+> **To test** (restart Alibre first):
+> 1. On `scan mt12`, with the same planes as before, press Create Loft. The warning should name planes 9 and 10, with plane 10 as the small one.
+> 2. Choose No: nothing should be made, and the result line should give the advice.
+> 3. Delete plane 10 and press Create Loft again: there should be no warning, and the loft should be made.
+> 4. Alternatively, keep plane 10, add planes after plane 9, and see whether the warning clears and the loft succeeds.
+
+### 🧑 Frank · 06:30
+
+> Works

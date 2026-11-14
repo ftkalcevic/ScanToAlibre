@@ -28,6 +28,7 @@ const long MENU_ID_SECTION      = 107;
 const long MENU_ID_SURFACE      = 108;
 const long MENU_ID_SILHOUETTE   = 109;
 const long MENU_ID_COMPARE      = 110;
+const long MENU_ID_SECTION_SERIES = 111;
 
 // Oldest Alibre build this add-on is written against (27.0.1.27039).
 const long MINIMUM_ALIBRE_BUILD = 27039;

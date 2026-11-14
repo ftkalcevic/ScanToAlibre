@@ -71,6 +71,7 @@ private:
     void DrawOrient(IADAddOnCanvasDisplay* pCanvas, ScanDocument& scan, bool planesOnly);
     // Section: the plane's outline, the slice and its fitted lines and arcs.
     void DrawSection(IADAddOnCanvasDisplay* pCanvas, ScanDocument& scan);
+    void DrawSeries(IADAddOnCanvasDisplay* pCanvas, ScanDocument& scan);
     // Surface: the selection, the fitted surface as a grid of lines, and its outline.
     void DrawSurface(IADAddOnCanvasDisplay* pCanvas, ScanDocument& scan);
     // Section: Alibre's selected design plane or flat face becomes the plane.

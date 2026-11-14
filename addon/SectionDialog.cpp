@@ -3,6 +3,7 @@
 #include "stdafx.h"
 #include "ScanToAlibre.h"
 #include "SectionDialog.h"
+#include "SectionSeriesDialog.h"
 #include "ScanDocument.h"
 #include "ScanImport.h"
 #include "ScanViewCommand.h"
@@ -55,12 +56,16 @@ void SectionViewChanged()
 {
     if (CSectionDlg* pDialog = dynamic_cast<CSectionDlg*>(OpenStepDialog()))
         pDialog->UpdateFromScan();
+    else
+        SeriesViewChanged();
 }
 
 void SectionPlanePicked()
 {
     if (CSectionDlg* pDialog = dynamic_cast<CSectionDlg*>(OpenStepDialog()))
         pDialog->PlanePicked();
+    else
+        SeriesPlanePicked();
 }
 
 void CSectionDlg::ClearAlibreSelection()

@@ -1,4 +1,6 @@
-# Plan (14 November 2026, approved by Frank, not started): Section Series, for lofting organic shapes
+# Plan (14 November 2026, approved by Frank; built and installed 14 November 2026, untested in Alibre): Section Series, for lofting organic shapes
+
+Built as below (Optimise for Loft is now Create Loft, which also makes the loft: Frank's request, 14 November 2026), except: each guide curve is its own 3D sketch (Alibre's loft takes guide curves as sketches); the Symmetric intent isn't applied to the series yet; loops are paired when their centroids are within their two sizes and their areas within 25 times (not just "by centroid and area"), and tiny loops are left out of matching. See `CLAUDE.md`.
 
 Code waits until the Scan tab tree (the other session's work in `ScanDocument`, `ScanViewCommand`, `ScanDisplayCommand`, `ScanData` version 3 and `resource.h`) is built, so the two don't edit the same files at once. Frank chose this.
 
