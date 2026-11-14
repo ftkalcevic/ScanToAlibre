@@ -10,8 +10,10 @@ Status: early. The add-on gets its own **ScanToAlibre** ribbon tab, whose button
 
 4. **Section** slices the scan with an Alibre plane or face, or one of the scan's planes, fits lines and arcs to the slice, and makes an Alibre sketch of them, constrained (horizontal, vertical, tangent, concentric) with rounded radii, and the slice itself as construction lines. Extrude or revolve it with Alibre's own commands.
 5. **Surface** fits a B-spline surface to areas of the scan you select (smooth areas or a brush), as heights over a base plane, optionally symmetric across XY, YZ or ZX and trimmed to the whole scan's outline or the selection's, or the rectangle round the selection or round the scan's box, made bigger by an offset if asked, and inserts it into the part to extrude up to.
+6. **Silhouette** makes a sketch of the scan's outline seen along a plane's normal, with every separate piece and through-hole, fitted and constrained as Section's are. It catches tabs and flanges that a slice at one height misses.
+7. **Compare** colours the scan by its distance from the part as built so far (blues inside, green within a tolerance, yellow to red outside, grey where the part isn't modelled yet), with statistics, and Probe reads the distance where you click.
 
-Then **Show Scan**, which shows the scan again after another command has ended the scan view, and **About**.
+Then **Show Scan**, which shows or hides the scan, and **About**.
 
 See `docs\SPEC.md` for the plan.
 

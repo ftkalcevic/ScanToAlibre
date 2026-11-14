@@ -4,6 +4,11 @@
 #include "ScanDocument.h"
 #include "Log.h"
 
+#include <algorithm>
+#include <chrono>
+#include <limits>
+#include <cmath>
+
 namespace
 {
     std::map<std::wstring, std::unique_ptr<ScanDocument>> g_scans;
@@ -79,6 +84,7 @@ void ScanDocument::SetMillimetresPerUnit(double millimetresPerUnit)
         displayArrays.reset();
         fullArrays.reset();
         selectionArrays.reset();
+        ResetBands();
     }
 }
 
@@ -148,16 +154,88 @@ void ScanDocument::SetSelection(std::vector<int> triangles)
 
 void ScanDocument::UpdateSection()
 {
-    if (!section.havePlane)
+    Section* pSection = ActiveSection();
+    if (pSection == nullptr)
+        return;
+    Section& s = *pSection;
+    if (!s.havePlane)
     {
-        section.result = scancore::SectionResult();
-        section.constraints.clear();
+        s.result = scancore::SectionResult();
+        s.constraints.clear();
         return;
     }
-    const scancore::Point3 origin = section.point + section.normal * section.offset;
-    section.frame = scancore::FrameForPlane(origin, section.normal);
-    section.result = scancore::SectionMesh(mesh, section.frame, section.tolerance, kReferenceTolerance);
-    section.constraints = scancore::FindConstraints(section.result.profiles, section.snap);
+    const scancore::Point3 origin = s.point + s.normal * s.offset;
+    s.frame = scancore::FrameForPlane(origin, s.normal);
+    SetSymmetryLine(s, s.frame);
+    s.result = SectionOf(mesh, s, s.frame);
+    s.constraints = scancore::ApplyDesignIntent(s.result, s.frame, s.tolerance, s.snap);
+    if (s.snap.symmetric)
+        Log(L"[section] symmetric about %S: %zu loops cut at the line, %zu pairs of loops, sides up to %.4f mm "
+            L"apart, %zu symmetric constraints",
+            s.symmetryName.empty() ? "(no symmetry plane square to this one)" : s.symmetryName.c_str(),
+            s.result.symmetricSplit, s.result.symmetricPaired, s.result.symmetricGap,
+            static_cast<size_t>(std::count_if(s.constraints.begin(), s.constraints.end(), [](const auto& c) {
+                return c.kind == scancore::ProfileConstraint::Kind::Symmetric;
+            })));
+}
+
+void ScanDocument::SetSymmetryLine(Section& s, const scancore::SectionFrame& frame) const
+{
+    using scancore::Point3;
+    s.snap.haveSymmetryLine = false;
+    s.symmetryName.clear();
+    std::vector<scancore::Feature> planes;
+    for (const scancore::Feature& f : fitted)
+        if (f.kind == scancore::Feature::Kind::Plane &&
+            (f.name.rfind("Symmetry plane", 0) == 0 || f.name.rfind("Mid plane", 0) == 0))
+            planes.push_back(f);
+    const char* worldNames[3] = { "XY", "YZ", "ZX" };
+    const Point3 worldNormals[3] = { { 0, 0, 1 }, { 1, 0, 0 }, { 0, 1, 0 } };
+    for (int k = 0; k < 3; ++k)
+        if (detectedSymmetry[k])
+        {
+            scancore::Feature f;
+            f.kind = scancore::Feature::Kind::Plane;
+            f.direction = worldNormals[k];
+            f.name = worldNames[k];
+            planes.push_back(f);
+        }
+    const Point3 normal = frame.Normal();
+    for (const scancore::Feature& f : planes)
+    {
+        const Point3 n = scancore::Normalised(f.direction);
+        if (std::fabs(scancore::Dot(n, normal)) > std::sin(1.0 * 3.14159265358979323846 / 180.0))
+            continue;
+        // In the section plane, from its origin across to the symmetry plane.
+        const Point3 across = scancore::Normalised(n - normal * scancore::Dot(n, normal));
+        const double t = scancore::Dot(f.point - frame.origin, n) / scancore::Dot(across, n);
+        const Point3 onBoth = frame.origin + across * t;
+        const Point3 along = scancore::Normalised(scancore::Cross(n, normal));
+        s.snap.haveSymmetryLine = true;
+        s.snap.symmetryPoint = frame.ToPlane(onBoth);
+        s.snap.symmetryDirection = { scancore::Dot(along, frame.xAxis), scancore::Dot(along, frame.yAxis) };
+        s.symmetryName = f.name;
+        return;
+    }
+}
+
+scancore::SectionResult SectionOf(const scancore::Mesh& mesh, ScanDocument::Section& section,
+                                  const scancore::SectionFrame& frame)
+{
+    if (section.kind == ScanDocument::Section::Kind::Silhouette)
+    {
+        const auto start = std::chrono::steady_clock::now();
+        scancore::SectionResult result =
+            scancore::SilhouetteMesh(mesh, frame, section.tolerance, kReferenceTolerance, section.smallestHole,
+                                     &section.silhouetteInfo, section.snap.fitArcs);
+        const scancore::SilhouetteInfo& i = section.silhouetteInfo;
+        Log(L"[silhouette] %zu pieces, %zu holes (%zu smaller filled, %zu specks left out), cell %.3f mm, %zu of %zu "
+            L"points on the mesh's outline edges, largest deviation %.4f mm, %.0f ms",
+            i.pieces, i.holes, i.filledHoles, i.droppedPieces, i.cell, i.snapped, i.points, result.largestDeviation,
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count());
+        return result;
+    }
+    return scancore::SectionMesh(mesh, frame, section.tolerance, kReferenceTolerance, section.snap.fitArcs);
 }
 
 void ScanDocument::UpdateSurface()
@@ -179,6 +257,109 @@ void ScanDocument::UpdateSurface()
             r.outline.size(), r.seconds);
     else
         Log(L"[surface] no fit for %zu triangles: %S", selection.size(), r.message.c_str());
+}
+
+void DeviationColour(int band, long rgb[3])
+{
+    static const long colours[scancore::kDeviationBands][3] = {
+        { 20, 40, 150 },   { 40, 110, 230 }, { 120, 190, 250 }, { 60, 190, 80 },
+        { 240, 220, 40 },  { 245, 140, 30 }, { 215, 35, 35 },   { 150, 150, 150 },
+    };
+    const int b = (band >= 0 && band < scancore::kDeviationBands) ? band : scancore::kDeviationGrey;
+    for (int k = 0; k < 3; ++k)
+        rgb[k] = colours[b][k];
+}
+
+void ScanDocument::ResetBands()
+{
+    for (auto& arrays : m_bandArrays)
+        arrays.reset();
+    m_bandsMade = false;
+}
+
+void ScanDocument::UpdateCompare()
+{
+    compare.meshValues.clear();
+    compare.displayValues.clear();
+    compare.searched = 0.0;
+    compare.haveProbe = false;
+    if (compare.havePart && !compare.part.triangles.empty())
+    {
+        const auto start = std::chrono::steady_clock::now();
+        compare.meshValues = scancore::Deviations(mesh.vertices, compare.part, compare.range);
+        compare.displayValues = scancore::Deviations(display.vertices, compare.part, compare.range);
+        compare.searched = compare.range;
+        Log(L"[compare] %zu scan points (and %zu drawn) against %zu part triangles within %g mm in %.0f ms",
+            mesh.vertices.size(), display.vertices.size(), compare.part.triangles.size(), compare.range,
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count());
+    }
+    RebandCompare();
+}
+
+void ScanDocument::RebandCompare()
+{
+    // Values beyond the range (after it shrinks) count as not compared.
+    std::vector<float> values = compare.meshValues;
+    for (float& v : values)
+        if (std::fabs(v) > compare.range)
+            v = std::numeric_limits<float>::quiet_NaN();
+    compare.stats = scancore::DeviationStatistics(values, compare.tolerance);
+    if (compare.haveProbe && std::fabs(compare.probeValue) > compare.range)
+        compare.probeValue = std::numeric_limits<double>::quiet_NaN();
+    const scancore::DeviationStats& s = compare.stats;
+    if (!compare.meshValues.empty())
+        Log(L"[compare] tolerance %g, range %g mm: %zu compared, %zu not; largest +%.4f / %.4f mm; rms %.4f mm; "
+            L"%.1f%% within",
+            compare.tolerance, compare.range, s.compared, s.notCompared, s.largestPositive, s.largestNegative, s.rms,
+            100.0 * s.within);
+    ResetBands();
+}
+
+const ScanDocument::DrawArrays* ScanDocument::BandArrays(int band)
+{
+    if (band < 0 || band >= scancore::kDeviationBands)
+        return nullptr;
+    if (!m_bandsMade || m_bandsFull != fullDetail)
+    {
+        ResetBands();
+        m_bandsMade = true;
+        m_bandsFull = fullDetail;
+        const scancore::Mesh& source = fullDetail ? mesh : display;
+        const std::vector<float>& values = fullDetail ? compare.meshValues : compare.displayValues;
+        if (values.size() == source.vertices.size() && !values.empty())
+        {
+            scancore::Mesh parts[scancore::kDeviationBands];
+            std::vector<int> remap(source.vertices.size() * scancore::kDeviationBands, -1);
+            for (const auto& t : source.triangles)
+            {
+                const float a = values[t[0]], b = values[t[1]], c = values[t[2]];
+                const double mean = (std::isnan(a) || std::isnan(b) || std::isnan(c))
+                                        ? std::numeric_limits<double>::quiet_NaN()
+                                        : (static_cast<double>(a) + b + c) / 3.0;
+                const int k = scancore::DeviationBand(mean, compare.tolerance, compare.range);
+                scancore::Mesh& part = parts[k];
+                std::array<int, 3> tri;
+                for (int corner = 0; corner < 3; ++corner)
+                {
+                    int& index = remap[static_cast<size_t>(t[corner]) * scancore::kDeviationBands + k];
+                    if (index < 0)
+                    {
+                        index = static_cast<int>(part.vertices.size());
+                        part.vertices.push_back(source.vertices[t[corner]]);
+                    }
+                    tri[corner] = index;
+                }
+                part.triangles.push_back(tri);
+            }
+            for (int k = 0; k < scancore::kDeviationBands; ++k)
+                if (!parts[k].triangles.empty())
+                    m_bandArrays[k] = MakeDrawArrays(parts[k], m_millimetresPerUnit);
+        }
+    }
+    const DrawArrays* pArrays = m_bandArrays[band].get();
+    if (pArrays == nullptr || pArrays->vertices == nullptr || pArrays->normals == nullptr || pArrays->faces == nullptr)
+        return nullptr;
+    return pArrays;
 }
 
 std::vector<scancore::Feature> ScanDocument::Features() const
@@ -205,6 +386,13 @@ void ScanDocument::DrawingChanged(bool trianglesChanged)
         SetSelection({});
     }
     surface.result = scancore::SurfaceFitResult();
+    // Compare's distances were for the scan as it was.
+    compare.meshValues.clear();
+    compare.displayValues.clear();
+    compare.searched = 0.0;
+    compare.stats = scancore::DeviationStats();
+    compare.haveProbe = false;
+    ResetBands();
     displayArrays.reset();
     fullArrays.reset();
     selectionArrays.reset();

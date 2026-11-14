@@ -110,6 +110,7 @@
     <ClCompile Include="AddOnInterface.cpp" />
     <ClCompile Include="ScanDisplayCommand.cpp" />
     <ClCompile Include="OrientDialog.cpp" />
+    <ClCompile Include="CompareDialog.cpp" />
     <ClCompile Include="SectionDialog.cpp" />
     <ClCompile Include="SurfaceDialog.cpp" />
     <ClCompile Include="SketchWriter.cpp" />
@@ -132,6 +133,7 @@
     <ClInclude Include="AddOnInterface.h" />
     <ClInclude Include="ScanDisplayCommand.h" />
     <ClInclude Include="OrientDialog.h" />
+    <ClInclude Include="CompareDialog.h" />
     <ClInclude Include="SectionDialog.h" />
     <ClInclude Include="SurfaceDialog.h" />
     <ClInclude Include="SketchWriter.h" />

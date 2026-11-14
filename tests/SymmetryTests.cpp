@@ -270,3 +270,18 @@ TEST_CASE("symmetry of a real scan" * doctest::skip())
                            << "): within " << c.score.within << ", matched " << c.score.matched << ", rms "
                            << c.score.rms << ", trimmed " << c.score.trimmed);
 }
+
+TEST_CASE("detect finds the world plane a scan is symmetric about")
+{
+    // Symmetric about x = 0 only, with lumps big enough that the block's own
+    // symmetry about XY and ZX doesn't pass.
+    Mesh mesh;
+    AddBox(mesh, { -30, -12, -5 }, { 30, 12, 5 });
+    AddBox(mesh, { -15, 0, 5 }, { 15, 12, 20 });
+    AddBox(mesh, { -20, -12, -12 }, { 20, -4, -5 });
+    const std::array<SymmetryScore, 3> scores = ScoreWorldPlanes(mesh);
+    MESSAGE("XY " << scores[0].within << ", YZ " << scores[1].within << ", ZX " << scores[2].within);
+    CHECK(scores[1].within >= 0.99);
+    CHECK(scores[0].within < 0.8);
+    CHECK(scores[2].within < 0.8);
+}

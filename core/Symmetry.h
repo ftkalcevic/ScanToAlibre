@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <array>
 #include <string>
 #include <vector>
 
@@ -64,6 +65,12 @@ namespace scancore
     std::vector<SymmetryCandidate> FindSymmetryPlanes(const Mesh& mesh, const OrientedBox& box,
                                                       const std::vector<Feature>& fitted,
                                                       const SymmetryOptions& options = SymmetryOptions());
+
+    // How well each world plane mirrors the scan, as it lies: XY (z = 0), YZ
+    // (x = 0) and ZX (y = 0), not refined (for 5 Surface's Detect, after the scan
+    // is aligned).
+    std::array<SymmetryScore, 3> ScoreWorldPlanes(const Mesh& mesh,
+                                                  const SymmetryOptions& options = SymmetryOptions());
 
     // The plane halfway between two planes (bisecting them, their normals
     // flipped to agree), two axes (square to the line joining them, through its

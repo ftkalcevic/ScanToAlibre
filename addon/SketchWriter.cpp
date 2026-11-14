@@ -8,6 +8,7 @@
 
 #include "Section.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <vector>
@@ -115,7 +116,14 @@ bool CreateSectionSketch(const std::wstring& sessionId, ScanDocument& scan, Sket
                          std::wstring& message)
 {
     const auto start = std::chrono::steady_clock::now();
-    ScanDocument::Section& section = scan.section;
+    ScanDocument::Section* pSection = scan.ActiveSection();
+    if (pSection == nullptr)
+    {
+        message = L"Open Section or Silhouette first.";
+        return false;
+    }
+    ScanDocument::Section& section = *pSection;
+    const bool silhouette = section.kind == ScanDocument::Section::Kind::Silhouette;
     if (!section.havePlane)
     {
         message = L"Choose a plane first.";
@@ -139,7 +147,7 @@ bool CreateSectionSketch(const std::wstring& sessionId, ScanDocument& scan, Sket
         // The plane to sketch on.
         ++section.sketches;
         wchar_t baseName[64];
-        swprintf_s(baseName, L"Scan Section %d", section.sketches);
+        swprintf_s(baseName, silhouette ? L"Scan Silhouette %d" : L"Scan Section %d", section.sketches);
         IDispatchPtr sketchPlane;
         if (section.alibrePlane != nullptr && std::fabs(section.offset) < 1e-9)
         {
@@ -210,14 +218,28 @@ bool CreateSectionSketch(const std::wstring& sessionId, ScanDocument& scan, Sket
         if (std::fabs(scancore::Dot(sketchNormal, normal)) < 0.999 || std::fabs(offPlane) > 0.01)
             Log(L"[section] the sketch isn't on the section's plane; the scan is sliced on the sketch's plane");
 
-        // Slice and fit again in the sketch's axes.
-        const scancore::SectionResult result =
-            scancore::SectionMesh(scan.mesh, frame, section.tolerance, kReferenceTolerance);
-        const std::vector<ProfileConstraint> constraints = scancore::FindConstraints(result.profiles, section.snap);
+        // Slice (or outline) and fit again in the sketch's axes.
+        scan.SetSymmetryLine(section, frame);
+        scancore::SectionResult result = SectionOf(scan.mesh, section, frame);
+        const std::vector<ProfileConstraint> constraints =
+            scancore::ApplyDesignIntent(result, frame, section.tolerance, section.snap);
+        // Sketch Options: the fitted lines and arcs, the raw slice, or both (the
+        // raw slice then as construction lines).
+        const bool fitted = section.createFitted;
+        const bool raw = section.createRaw;
+        if (!fitted && !raw)
+        {
+            message = L"Tick Create Raw Sketch or Create Fitted Sketch.";
+            return false;
+        }
+        bool anySymmetric = false;
+        for (const ProfileConstraint& c : constraints)
+            anySymmetric = anySymmetric || (fitted && c.kind == ProfileConstraint::Kind::Symmetric);
         report.largestDeviation = result.largestDeviation;
         if (result.profiles.empty())
         {
-            message = L"The sketch's plane doesn't cut the scan, so the sketch is empty.";
+            message = silhouette ? L"The scan has no outline seen along the sketch's plane, so the sketch is empty."
+                                 : L"The sketch's plane doesn't cut the scan, so the sketch is empty.";
             return false;
         }
 
@@ -225,10 +247,11 @@ bool CreateSectionSketch(const std::wstring& sessionId, ScanDocument& scan, Sket
         step = L"adding the figures";
         IADSketchFiguresPtr figures = sketch->GetFigures();
         std::vector<std::vector<Made>> made(result.profiles.size());
+        IADSketchFigurePtr symmetryLine;
         sketch->BeginChange();
         try
         {
-            for (size_t pi = 0; pi < result.profiles.size(); ++pi)
+            for (size_t pi = 0; fitted && pi < result.profiles.size(); ++pi)
             {
                 for (const ProfileSegment& seg : result.profiles[pi].segments)
                 {
@@ -261,6 +284,31 @@ bool CreateSectionSketch(const std::wstring& sessionId, ScanDocument& scan, Sket
                     if (figure != nullptr)
                         m.idDuringChange = static_cast<LPCWSTR>(figure->GetID());
                     made[pi].push_back(m);
+                }
+            }
+            // The symmetry line, a construction line a little past the profiles each way.
+            if (anySymmetric)
+            {
+                const Vec2 p = section.snap.symmetryPoint;
+                const Vec2 d = section.snap.symmetryDirection;
+                double low = 1e300, high = -1e300;
+                for (const scancore::Profile& profile : result.profiles)
+                    for (const ProfileSegment& seg : profile.segments)
+                        for (const Vec2& q : { seg.start, seg.end, seg.centre })
+                        {
+                            const double along = (q.x - p.x) * d.x + (q.y - p.y) * d.y;
+                            low = (std::min)(low, along);
+                            high = (std::max)(high, along);
+                        }
+                low -= 5.0;
+                high += 5.0;
+                IADSketchLinePtr line = figures->AddLine((p.x + d.x * low) / unit, (p.y + d.y * low) / unit,
+                                                         (p.x + d.x * high) / unit, (p.y + d.y * high) / unit);
+                symmetryLine = line;
+                if (symmetryLine != nullptr)
+                {
+                    symmetryLine->PutIsReference(VARIANT_TRUE);
+                    ++report.reference;
                 }
             }
         }
@@ -338,11 +386,32 @@ bool CreateSectionSketch(const std::wstring& sessionId, ScanDocument& scan, Sket
         };
         IADSketchConstraintsPtr sketchConstraints = sketch->GetSketchConstraints();
         size_t refusalsLogged = 0;
+        // Whether a constraint was made is judged by the count going up: AddConstraint
+        // returned false for coincident ends that Alibre joined anyway (proven with
+        // the Alibre MCP tools, 14 November 2026: the count went up by 2), and a
+        // coincident whose ends Alibre had already joined itself leaves the count
+        // as it was, which isn't a refusal.
+        size_t alreadyJoined = 0;
         auto add = [&](const wchar_t* what, IObjectCollectorPtr targets, ADSketchConstraintType type) {
             try
             {
-                sketchConstraints->AddConstraint(targets, type);
-                ++report.constraints;
+                const long before = sketchConstraints->GetCount();
+                const bool said = sketchConstraints->AddConstraint(targets, type) != VARIANT_FALSE;
+                const long after = sketchConstraints->GetCount();
+                if (said || after > before)
+                {
+                    ++report.constraints;
+                }
+                else if (type == ADSketchConstraintType_AD_CONSTRAINT_COINCIDENT)
+                {
+                    ++alreadyJoined;
+                }
+                else
+                {
+                    ++report.constraintsRefused;
+                    if (refusalsLogged++ < 10)
+                        Log(L"[section] %s refused: AddConstraint returned false and made nothing", what);
+                }
             }
             catch (const _com_error& error)
             {
@@ -355,6 +424,9 @@ bool CreateSectionSketch(const std::wstring& sessionId, ScanDocument& scan, Sket
         sketch->BeginChange();
         try
         {
+            // The symmetry line stays where the scan's symmetry plane is.
+            if (symmetryLine != nullptr)
+                add(L"fixed symmetry line", Collect({ symmetryLine }), ADSketchConstraintType_AD_CONSTRAINT_FIX);
             for (size_t pi = 0; pi < result.profiles.size(); ++pi)
             {
                 const Profile& profile = result.profiles[pi];
@@ -395,6 +467,21 @@ bool CreateSectionSketch(const std::wstring& sessionId, ScanDocument& scan, Sket
                         add(L"concentric", Collect({ a, b }), ADSketchConstraintType_AD_CONSTRAINT_COINCIDENT);
                     break;
                 }
+                case ProfileConstraint::Kind::Symmetric:
+                {
+                    // Two points mirrored about the symmetry line (unproven in Alibre).
+                    auto point = [&](size_t pi, size_t s, int which) -> IADSketchPointPtr {
+                        return which == 2 ? centre(pi, s) : endPoint(pi, s, which == 1);
+                    };
+                    IADSketchPointPtr a = point(c.profile, c.segment, c.point);
+                    IADSketchPointPtr b = point(c.otherProfile, c.otherSegment, c.otherPoint);
+                    // The line of symmetry first: given last, Alibre mirrors the
+                    // others about the first (proven in MCPForAlibre, 10 November
+                    // 2026), which moved Frank's sketches off the scan.
+                    if (a != nullptr && b != nullptr && symmetryLine != nullptr)
+                        add(L"symmetric", Collect({ symmetryLine, a, b }), ADSketchConstraintType_AD_CONSTRAINT_SYMMETRIC);
+                    break;
+                }
                 default:
                     break;
                 }
@@ -431,12 +518,13 @@ bool CreateSectionSketch(const std::wstring& sessionId, ScanDocument& scan, Sket
         }
         sketch->EndChange();
 
-        // 3. The slice itself, as construction lines.
-        step = L"adding the reference slice";
+        // 3. The slice itself: construction lines beside the fitted sketch, or
+        // ordinary lines when it's the raw sketch alone.
+        step = L"adding the raw slice";
         sketch->BeginChange();
         try
         {
-            for (size_t pi = 0; pi < result.reference.size(); ++pi)
+            for (size_t pi = 0; raw && pi < result.reference.size(); ++pi)
             {
                 const std::vector<Vec2>& points = result.reference[pi];
                 const bool closed = result.slices[pi].closed;
@@ -448,8 +536,15 @@ bool CreateSectionSketch(const std::wstring& sessionId, ScanDocument& scan, Sket
                     IADSketchLinePtr line = figures->AddLine(a.x / unit, a.y / unit, b.x / unit, b.y / unit);
                     if (IADSketchFigurePtr f = line)
                     {
-                        f->PutIsReference(VARIANT_TRUE);
-                        ++report.reference;
+                        if (fitted)
+                        {
+                            f->PutIsReference(VARIANT_TRUE);
+                            ++report.reference;
+                        }
+                        else
+                        {
+                            ++report.rawLines;
+                        }
                     }
                 }
             }
@@ -462,11 +557,13 @@ bool CreateSectionSketch(const std::wstring& sessionId, ScanDocument& scan, Sket
         sketch->EndChange();
 
         report.seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+        Log(L"[section] %zu coincident ends Alibre had already joined itself", alreadyJoined);
         Log(L"[section] %s: %zu lines, %zu arcs, %zu circles (largest deviation %.4f mm); %zu constraints (%zu "
-            L"refused), %zu dimensions (%zu refused); %zu construction lines; %.2f s; %zu figure lookups by ID failed",
+            L"refused), %zu dimensions (%zu refused); %zu construction lines, %zu raw lines; %.2f s; %zu figure lookups "
+            L"by ID failed",
             report.sketchName.c_str(), report.lines, report.arcs, report.circles, report.largestDeviation,
             report.constraints, report.constraintsRefused, report.dimensions, report.dimensionsRefused,
-            report.reference, report.seconds, lookupsFailed);
+            report.reference, report.rawLines, report.seconds, lookupsFailed);
         return true;
     }
     catch (const _com_error& error)

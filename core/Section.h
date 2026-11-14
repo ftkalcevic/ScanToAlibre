@@ -70,11 +70,13 @@ namespace scancore
 
     // Lines and arcs through a slice's points (in the plane's frame), within
     // tolerance. A closed loop starts at its sharpest corner, and a loop with
-    // none that's round within tolerance becomes one circle.
-    Profile FitProfile(const std::vector<Vec2>& points, bool closed, double tolerance);
+    // none that's round within tolerance becomes one circle. With arcs false,
+    // lines only (no arcs or circles).
+    Profile FitProfile(const std::vector<Vec2>& points, bool closed, double tolerance, bool arcs = true);
 
     struct SnapOptions
     {
+        bool fitArcs = true;                // false: profiles are fitted with lines only (Sketch Options)
         bool horizontalVertical = true;
         double horizontalVerticalDegrees = 2.0;
         bool tangent = true;
@@ -82,18 +84,30 @@ namespace scancore
         bool concentric = true;
         double concentricDistance = 0.05;   // mm, centres this close are concentric
         double roundTo = 0.1;               // mm for arc and circle radii; 0 leaves them as fitted
+        // Symmetric: the profiles made exactly symmetric about the symmetry
+        // line (where a symmetry plane, square to the sketch, meets it), and
+        // their matching points constrained symmetric (MakeSymmetric).
+        bool symmetric = false;
+        bool haveSymmetryLine = false;
+        Vec2 symmetryPoint, symmetryDirection;  // in the frame; the direction unit
+        double symmetryDistance = 0.05;     // mm (not used by MakeSymmetric, which takes the fit's tolerance)
+        double symmetryDegrees = 2.0;       // a line this near square to the symmetry line runs across it
     };
 
     struct ProfileConstraint
     {
-        enum class Kind { Horizontal, Vertical, Tangent, Concentric, Radius };
+        enum class Kind { Horizontal, Vertical, Tangent, Concentric, Radius, Symmetric };
         Kind kind = Kind::Horizontal;
         size_t profile = 0, segment = 0;            // the segment it's on
         size_t otherProfile = 0, otherSegment = 0;  // tangent (the next segment) and concentric
         double value = 0.0;                         // radius, rounded
+        // Symmetric: which point of each segment (0 start, 1 end, 2 centre)
+        // mirrors which, about the symmetry line.
+        int point = 0, otherPoint = 0;
     };
 
     std::vector<ProfileConstraint> FindConstraints(const std::vector<Profile>& profiles, const SnapOptions& options);
+
 
     // value to the nearest step (step 0 or less leaves it).
     double RoundTo(double value, double step);
@@ -113,9 +127,39 @@ namespace scancore
         // How far the scan reaches from the plane along its normal: behind is 0
         // or less, ahead 0 or more (a suggested extrude depth).
         double behind = 0.0, ahead = 0.0;
+        // Symmetric: loops cut at the symmetry line and made of one half and its
+        // mirror image, and loops paired with their mirror image.
+        size_t symmetricSplit = 0, symmetricPaired = 0;
+        // How far apart the scan's two sides are at most (a point from the other
+        // side's mirror image), mm; the fit goes halfway between.
+        double symmetricGap = 0.0;
     };
     SectionResult SectionMesh(const Mesh& mesh, const SectionFrame& frame, double tolerance,
-                              double referenceTolerance);
+                              double referenceTolerance, bool arcs = true);
+
+    // With options.symmetric and a symmetry line, the profiles are fitted again
+    // so they're exactly symmetric about it. Fitting each side alone and pairing
+    // what came out failed on a real scan (the fit breaks the two sides into
+    // different pieces), so it's done before fitting:
+    // - a closed slice crossing the line twice is cut there, each half fitted
+    //   (FitProfile, open), and the better fit (smaller largest deviation) and
+    //   its mirror image make the loop; where a half's end segment meets its
+    //   mirror at the line (a line within symmetryDegrees of square to it, or an
+    //   arc whose centre is within the tolerance of it) the two become one
+    //   segment across it, and half a circle becomes a circle;
+    // - a closed slice wholly on one side is paired with the one whose centroid
+    //   mirrors its own (within 5 tolerances or 5% of its size) and whose area
+    //   is within 10%: the better fit and its mirror image are used for both;
+    // - other slices are left as fitted.
+    // Returns a Symmetric constraint for each joint (a segment's start, or a
+    // circle's centre) of the changed profiles and its exact mirror; joints on
+    // the line get none.
+    std::vector<ProfileConstraint> MakeSymmetric(SectionResult& result, const SectionFrame& frame, double tolerance,
+                                                 const SnapOptions& options);
+
+    // MakeSymmetric, then FindConstraints: the whole design intent.
+    std::vector<ProfileConstraint> ApplyDesignIntent(SectionResult& result, const SectionFrame& frame,
+                                                     double tolerance, const SnapOptions& options);
 
     // A frame for a plane: origin, and axes along the projection of X (or Y,
     // when X is nearly square to the plane) and normal cross that.

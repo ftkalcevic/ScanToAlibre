@@ -99,14 +99,30 @@
 #define IDC_OR_FIND_SYMMETRY            13116
 #define IDC_OR_MID_PLANE                13117
 #define IDC_OR_DELETE_ALL               13118
+#define IDD_SILHOUETTE                  13119
+#define IDC_SIL_SMALLEST_HOLE           13120
+#define IDD_COMPARE                     13121
+#define IDC_CMP_TOLERANCE               13122
+#define IDC_CMP_RANGE                   13123
+#define IDC_CMP_LEGEND                  13124
+#define IDC_CMP_STATS                   13125
+#define IDC_CMP_PROBE                   13126
+#define IDC_CMP_STATUS                  13127
+#define IDC_CMP_INFO                    13128
+#define IDC_SURF_DETECT                 13129
+#define IDC_SURF_SYMMETRY_SCORE         13130
+#define IDC_SEC_SYMMETRIC               13131
+#define IDC_SEC_CREATE_RAW              13132
+#define IDC_SEC_CREATE_FITTED           13133
+#define IDC_SEC_FIT_ARCS                13134
 
 // Next default values for new objects
 //
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        13119
+#define _APS_NEXT_RESOURCE_VALUE        13135
 #define _APS_NEXT_COMMAND_VALUE         32771
-#define _APS_NEXT_CONTROL_VALUE         13119
-#define _APS_NEXT_SYMED_VALUE           13119
+#define _APS_NEXT_CONTROL_VALUE         13135
+#define _APS_NEXT_SYMED_VALUE           13135
 #endif
 #endif

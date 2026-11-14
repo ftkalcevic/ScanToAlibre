@@ -22,6 +22,7 @@
     <ClCompile Include="AddOnInterface.cpp"><Filter>Source Files</Filter></ClCompile>
     <ClCompile Include="ScanDisplayCommand.cpp"><Filter>Source Files</Filter></ClCompile>
     <ClCompile Include="OrientDialog.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="CompareDialog.cpp"><Filter>Source Files</Filter></ClCompile>
     <ClCompile Include="SectionDialog.cpp"><Filter>Source Files</Filter></ClCompile>
     <ClCompile Include="SurfaceDialog.cpp"><Filter>Source Files</Filter></ClCompile>
     <ClCompile Include="SketchWriter.cpp"><Filter>Source Files</Filter></ClCompile>
@@ -42,6 +43,7 @@
     <ClInclude Include="AddOnInterface.h"><Filter>Header Files</Filter></ClInclude>
     <ClInclude Include="ScanDisplayCommand.h"><Filter>Header Files</Filter></ClInclude>
     <ClInclude Include="OrientDialog.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="CompareDialog.h"><Filter>Header Files</Filter></ClInclude>
     <ClInclude Include="SectionDialog.h"><Filter>Header Files</Filter></ClInclude>
     <ClInclude Include="SurfaceDialog.h"><Filter>Header Files</Filter></ClInclude>
     <ClInclude Include="SketchWriter.h"><Filter>Header Files</Filter></ClInclude>

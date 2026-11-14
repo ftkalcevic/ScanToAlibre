@@ -4,6 +4,7 @@
 #include "ScanToAlibre.h"
 #include "StepDialog.h"
 #include "Log.h"
+#include "ScanViewCommand.h"
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -54,7 +55,10 @@ void CStepDialog::OnOK()
 void CStepDialog::PostNcDestroy()
 {
     if (g_open == this)
+    {
         g_open = nullptr;
+        RefreshScanViews();     // the scan view stops drawing the scan (Show Scan's job)
+    }
     CDialog::PostNcDestroy();
     delete this;
 }

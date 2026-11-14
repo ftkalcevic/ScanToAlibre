@@ -11,6 +11,7 @@
 #include "RefineDialog.h"
 #include "OrientDialog.h"
 #include "SectionDialog.h"
+#include "CompareDialog.h"
 #include "SurfaceDialog.h"
 #include "ScanDisplayCommand.h"
 #include "SurfaceTest.h"
@@ -126,7 +127,7 @@ STDMETHODIMP CAddOnInterface::SubMenuItems(long menuID, SAFEARRAY** pSubMenuIDs)
 
     // The workflow, in order, then Show Scan and About. Insert Test Surface proved
     // surface insertion and is left off (SurfaceTest still has it).
-    const long children[] = { MENU_ID_LOAD, MENU_ID_REFINE, MENU_ID_ORIENT, MENU_ID_SECTION, MENU_ID_SURFACE, MENU_ID_SHOW_SCAN, MENU_ID_ABOUT };
+    const long children[] = { MENU_ID_LOAD, MENU_ID_REFINE, MENU_ID_ORIENT, MENU_ID_SECTION, MENU_ID_SURFACE, MENU_ID_SILHOUETTE, MENU_ID_COMPARE, MENU_ID_SHOW_SCAN, MENU_ID_ABOUT };
     const ULONG count = static_cast<ULONG>(sizeof(children) / sizeof(children[0]));
 
     // The caller takes ownership of the array.
@@ -163,6 +164,8 @@ STDMETHODIMP CAddOnInterface::MenuItemText(long menuID, BSTR* pMenuDisplayText)
     case MENU_ID_ORIENT:       *pMenuDisplayText = _bstr_t(L"3 Orient").Detach(); break;
     case MENU_ID_SECTION:      *pMenuDisplayText = _bstr_t(L"4 Section").Detach(); break;
     case MENU_ID_SURFACE:      *pMenuDisplayText = _bstr_t(L"5 Surface").Detach(); break;
+    case MENU_ID_SILHOUETTE:   *pMenuDisplayText = _bstr_t(L"6 Silhouette").Detach(); break;
+    case MENU_ID_COMPARE:      *pMenuDisplayText = _bstr_t(L"7 Compare").Detach(); break;
     case MENU_ID_SHOW_SCAN:    *pMenuDisplayText = _bstr_t(L"Show Scan").Detach(); break;
     case MENU_ID_TEST_SURFACE: *pMenuDisplayText = _bstr_t(L"Insert Test Surface").Detach(); break;
     case MENU_ID_ABOUT:  *pMenuDisplayText = _bstr_t(L"About").Detach();    break;
@@ -192,7 +195,8 @@ STDMETHODIMP CAddOnInterface::MenuItemState(long menuID, BSTR sessionIdentifier,
         *pType = ScanDisplayOn(sessionIdentifier) ? ADDONMenuStates_ADDON_MENU_CHECKED
                                                   : ADDONMenuStates_ADDON_MENU_UNCHECKED;
     else if ((menuID == MENU_ID_REFINE || menuID == MENU_ID_ORIENT || menuID == MENU_ID_SECTION ||
-              menuID == MENU_ID_SURFACE) && part && FindScan(sessionIdentifier) != nullptr)
+              menuID == MENU_ID_SURFACE || menuID == MENU_ID_SILHOUETTE || menuID == MENU_ID_COMPARE) && part &&
+             FindScan(sessionIdentifier) != nullptr)
         *pType = ADDONMenuStates_ADDON_MENU_ENABLED;
     else
         *pType = ADDONMenuStates_ADDON_MENU_GRAYED;
@@ -235,6 +239,18 @@ STDMETHODIMP CAddOnInterface::MenuItemToolTip(long menuID, BSTR* pToolTip)
                             L"to them as heights over a base plane, optionally symmetric and trimmed to the "
                             L"selection's outline, and insert it into the part. Extrude up to it with Alibre's "
                             L"own commands.").Detach();
+        break;
+    case MENU_ID_SILHOUETTE:
+        *pToolTip = _bstr_t(L"Step 6: the scan's outline seen along a plane's normal, with every separate piece "
+                            L"and through-hole, fitted with lines and arcs and made into an Alibre sketch, as "
+                            L"Section does. It catches tabs and flanges a slice at one height misses. Then extrude "
+                            L"it with Alibre's own commands.").Detach();
+        break;
+    case MENU_ID_COMPARE:
+        *pToolTip = _bstr_t(L"Step 7: colour the scan by its distance from the part as built so far: blues inside "
+                            L"the part, green within the tolerance, yellow to red outside, grey where the part "
+                            L"isn't modelled yet. Shows statistics, and Probe reads the distance where you click. "
+                            L"The part is read when it opens; open it again after changing the part.").Detach();
         break;
     case MENU_ID_SHOW_SCAN:
         *pToolTip = _bstr_t(L"Show this part's scan, and keep it showing through other commands such as Measure. "
@@ -325,7 +341,29 @@ STDMETHODIMP CAddOnInterface::InvokeCommand(long menuID, BSTR sessionIdentifier,
         if (!IsAlibreVersionSupported() || !IsPartSession(sessionIdentifier) || FindScan(sessionId) == nullptr)
             return S_OK;
         // The view starts after the dialog, so it draws the section from the start.
-        CSectionDlg* pDialog = new CSectionDlg(sessionId);
+        CSectionDlg* pDialog = new CSectionDlg(sessionId, false);
+        pDialog->Open();
+        return StartScanView(sessionIdentifier, pCommand);
+    }
+
+    if (menuID == MENU_ID_COMPARE)
+    {
+        const std::wstring sessionId = (sessionIdentifier != nullptr) ? sessionIdentifier : L"";
+        if (!IsAlibreVersionSupported() || !IsPartSession(sessionIdentifier) || FindScan(sessionId) == nullptr)
+            return S_OK;
+        // The view starts after the dialog, so it draws the colours from the start.
+        CCompareDlg* pDialog = new CCompareDlg(sessionId);
+        pDialog->Open();
+        return StartScanView(sessionIdentifier, pCommand);
+    }
+
+    if (menuID == MENU_ID_SILHOUETTE)
+    {
+        const std::wstring sessionId = (sessionIdentifier != nullptr) ? sessionIdentifier : L"";
+        if (!IsAlibreVersionSupported() || !IsPartSession(sessionIdentifier) || FindScan(sessionId) == nullptr)
+            return S_OK;
+        // Section's dialog on its own template; the view starts after it, as for Section.
+        CSectionDlg* pDialog = new CSectionDlg(sessionId, true);
         pDialog->Open();
         return StartScanView(sessionIdentifier, pCommand);
     }
@@ -351,6 +389,7 @@ STDMETHODIMP CAddOnInterface::InvokeCommand(long menuID, BSTR sessionIdentifier,
             return S_OK;
         pScan->SetMillimetresPerUnit(MillimetresPerModelUnit(sessionId));
         CScanDisplayCommand* pDisplay = ToggleScanDisplay(sessionId);
+        pScan->scanHidden = pDisplay->Site() != nullptr;    // running: this click turns it off
         const HRESULT hr =
             pDisplay->QueryInterface(__uuidof(IAlibreAddOnCommand), reinterpret_cast<void**>(pCommand));
         Log(L"[display] Show Scan clicked (%s) hr=0x%08X", pDisplay->Site() != nullptr ? L"turning off" : L"turning on",
@@ -580,7 +619,7 @@ STDMETHODIMP CAddOnInterface::MenuIcon(long menuID, BSTR* pMenuIconPath)
     if (menuID != MENU_ID_ROOT && menuID != MENU_ID_ABOUT && menuID != MENU_ID_TEST_SURFACE &&
         menuID != MENU_ID_LOAD && menuID != MENU_ID_SHOW_SCAN &&
         menuID != MENU_ID_REFINE && menuID != MENU_ID_ORIENT && menuID != MENU_ID_SECTION &&
-        menuID != MENU_ID_SURFACE)
+        menuID != MENU_ID_SURFACE && menuID != MENU_ID_SILHOUETTE && menuID != MENU_ID_COMPARE)
         return S_OK;
 
     // The icon is deployed beside the DLL. Resolve it from our own module,

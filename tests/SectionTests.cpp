@@ -2,6 +2,7 @@
 
 #include <doctest/doctest.h>
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -9,7 +10,10 @@
 
 #include "ScanFile.h"
 
+#include "Orient.h"
 #include "Section.h"
+#include "Silhouette.h"
+#include "Symmetry.h"
 
 using namespace scancore;
 
@@ -424,5 +428,353 @@ TEST_CASE("section a real scan" * doctest::skip())
                     "%zu constraints, %zu reference points, fit %.3f s\n",
                     k, slices.size(), points, std::chrono::duration<double>(t1 - t0).count(), segments, worst,
                     constraints.size(), reference, std::chrono::duration<double>(t2 - t1).count());
+    }
+}
+
+namespace
+{
+    // Points every step along a line, with noise across it.
+    void AddLinePoints(std::vector<Vec2>& points, Vec2 a, Vec2 b, double step, double noise, unsigned& seed)
+    {
+        const double length = std::hypot(b.x - a.x, b.y - a.y);
+        const int n = std::max(1, static_cast<int>(length / step));
+        for (int k = 0; k < n; ++k)
+        {
+            seed = seed * 1103515245u + 12345u;
+            const double wobble = noise * (static_cast<double>((seed >> 8) % 2001) / 1000.0 - 1.0);
+            const double t = static_cast<double>(k) / n;
+            points.push_back({ a.x + (b.x - a.x) * t - (b.y - a.y) / length * wobble,
+                               a.y + (b.y - a.y) * t + (b.x - a.x) / length * wobble });
+        }
+    }
+
+    void AddArcPoints(std::vector<Vec2>& points, Vec2 centre, double radius, double from, double to, double step,
+                      double noise, unsigned& seed)
+    {
+        const int n = std::max(1, static_cast<int>(std::fabs(to - from) * radius / step));
+        for (int k = 0; k < n; ++k)
+        {
+            seed = seed * 1103515245u + 12345u;
+            const double wobble = noise * (static_cast<double>((seed >> 8) % 2001) / 1000.0 - 1.0);
+            const double a = from + (to - from) * k / n;
+            points.push_back({ centre.x + (radius + wobble) * std::cos(a), centre.y + (radius + wobble) * std::sin(a) });
+        }
+    }
+
+    SlicePolyline Slice(const std::vector<Vec2>& points)
+    {
+        SlicePolyline slice;
+        slice.closed = true;
+        for (const Vec2& p : points)
+            slice.points.push_back({ p.x, p.y, 0.0 });
+        return slice;
+    }
+}
+
+TEST_CASE("the symmetric intent makes a noisy section exactly symmetric")
+{
+    const double kPi = 3.14159265358979323846;
+    unsigned seed = 7;
+    // An outline a little off symmetric about x = 0: a bottom across the axis,
+    // two sides, and an arc over the top across the axis, the right side 0.02 out.
+    std::vector<Vec2> outline;
+    const double r = std::sqrt(20.0 * 20.0 + 10.0 * 10.0);
+    AddLinePoints(outline, { -20, 0 }, { 20.02, 0 }, 0.2, 0.01, seed);
+    AddLinePoints(outline, { 20.02, 0 }, { 20.02, 10 }, 0.2, 0.01, seed);
+    AddArcPoints(outline, { 0, 0 }, r, std::atan2(10.0, 20.0), kPi - std::atan2(10.0, 20.0), 0.2, 0.01, seed);
+    AddLinePoints(outline, { -20, 10 }, { -20, 0 }, 0.2, 0.01, seed);
+    // Two holes, mirrored, a little off; and a slot on one side only.
+    std::vector<Vec2> left, right, slot;
+    AddArcPoints(left, { -8.02, 5 }, 2.01, 0.0, -2.0 * kPi, 0.1, 0.005, seed);
+    AddArcPoints(right, { 7.99, 5.01 }, 1.99, 0.0, -2.0 * kPi, 0.1, 0.005, seed);
+    AddLinePoints(slot, { 12, 3 }, { 15, 3 }, 0.1, 0.0, seed);
+    AddLinePoints(slot, { 15, 3 }, { 15, 6 }, 0.1, 0.0, seed);
+    AddLinePoints(slot, { 15, 6 }, { 12, 3 }, 0.1, 0.0, seed);
+
+    SectionResult result;
+    for (const auto* loop : { &outline, &left, &right, &slot })
+    {
+        result.slices.push_back(Slice(*loop));
+        result.profiles.push_back(FitProfile(*loop, true, 0.05));
+    }
+    const SectionFrame frame;           // the world's XY
+    SnapOptions options;
+    options.symmetric = true;
+    options.haveSymmetryLine = true;
+    options.symmetryPoint = { 0, 0 };
+    options.symmetryDirection = { 0, 1 };
+    const Profile slotBefore = result.profiles[3];
+    const std::vector<ProfileConstraint> constraints = ApplyDesignIntent(result, frame, 0.05, options);
+    CHECK(result.symmetricSplit == 1);
+    CHECK(result.symmetricPaired == 1);
+
+    // Every vertex of the outline has its exact mirror among them, or is on the axis.
+    const Profile& o = result.profiles[0];
+    REQUIRE(o.closed);
+    size_t lines = 0, arcs = 0;
+    for (const ProfileSegment& seg : o.segments)
+    {
+        (seg.kind == ProfileSegment::Kind::Line ? lines : arcs)++;
+        bool found = std::fabs(seg.start.x) < 1e-9;
+        for (const ProfileSegment& other : o.segments)
+            found = found || (std::fabs(seg.start.x + other.start.x) < 1e-9 && std::fabs(seg.start.y - other.start.y) < 1e-9);
+        CHECK(found);
+    }
+    // The bottom and the top each one segment across the axis: four in all.
+    CHECK(lines == 3);
+    CHECK(arcs == 1);
+    for (size_t s = 0; s < o.segments.size(); ++s)
+    {
+        const Vec2 a = o.segments[s].end, b = o.segments[(s + 1) % o.segments.size()].start;
+        CHECK(std::hypot(a.x - b.x, a.y - b.y) < 1e-9);
+    }
+    // The holes mirror each other; the slot is left as it was.
+    REQUIRE(result.profiles[1].segments.size() == 1);
+    REQUIRE(result.profiles[2].segments.size() == 1);
+    CHECK(result.profiles[1].segments[0].centre.x == doctest::Approx(-result.profiles[2].segments[0].centre.x).epsilon(1e-12));
+    CHECK(result.profiles[1].segments[0].centre.y == doctest::Approx(result.profiles[2].segments[0].centre.y).epsilon(1e-12));
+    CHECK(result.profiles[1].segments[0].radius == result.profiles[2].segments[0].radius);
+    CHECK(result.profiles[3].segments.size() == slotBefore.segments.size());
+
+    // Symmetric constraints: the outline's two pairs of corners, and the holes' centres.
+    size_t symmetric = 0;
+    for (const ProfileConstraint& c : constraints)
+    {
+        if (c.kind != ProfileConstraint::Kind::Symmetric)
+            continue;
+        ++symmetric;
+        const ProfileSegment& a = result.profiles[c.profile].segments[c.segment];
+        const ProfileSegment& b = result.profiles[c.otherProfile].segments[c.otherSegment];
+        const Vec2 pa = c.point == 2 ? a.centre : a.start;
+        const Vec2 pb = c.otherPoint == 2 ? b.centre : b.start;
+        CHECK(std::fabs(pa.x + pb.x) < 1e-9);
+        CHECK(std::fabs(pa.y - pb.y) < 1e-9);
+    }
+    CHECK(symmetric == 3);
+
+    // With the option off, nothing changes.
+    SectionResult untouched;
+    untouched.slices.push_back(Slice(outline));
+    untouched.profiles.push_back(FitProfile(outline, true, 0.05));
+    const size_t before = untouched.profiles[0].segments.size();
+    options.symmetric = false;
+    const std::vector<ProfileConstraint> none = ApplyDesignIntent(untouched, frame, 0.05, options);
+    for (const ProfileConstraint& c : none)
+        CHECK(c.kind != ProfileConstraint::Kind::Symmetric);
+    CHECK(untouched.profiles[0].segments.size() == before);
+}
+
+namespace
+{
+    // How far a point is from a profile's segments.
+    double DistanceToProfile(const Vec2& p, const Profile& profile)
+    {
+        const double kPi = 3.14159265358979323846;
+        double best = 1e300;
+        for (const ProfileSegment& s : profile.segments)
+        {
+            double d = 1e300;
+            if (s.kind == ProfileSegment::Kind::Line)
+            {
+                const double dx = s.end.x - s.start.x, dy = s.end.y - s.start.y;
+                const double l2 = dx * dx + dy * dy;
+                const double t = l2 > 0.0 ? std::clamp(((p.x - s.start.x) * dx + (p.y - s.start.y) * dy) / l2, 0.0, 1.0) : 0.0;
+                d = std::hypot(p.x - s.start.x - dx * t, p.y - s.start.y - dy * t);
+            }
+            else
+            {
+                const double r = std::hypot(p.x - s.centre.x, p.y - s.centre.y);
+                bool inside = s.kind == ProfileSegment::Kind::Circle;
+                if (!inside)
+                {
+                    const double a0 = std::atan2(s.start.y - s.centre.y, s.start.x - s.centre.x);
+                    const double a1 = std::atan2(s.end.y - s.centre.y, s.end.x - s.centre.x);
+                    const double ap = std::atan2(p.y - s.centre.y, p.x - s.centre.x);
+                    auto ccw = [&](double from, double to) { double v = to - from; while (v < 0) v += 2 * kPi; while (v >= 2 * kPi) v -= 2 * kPi; return v; };
+                    inside = s.anticlockwise ? ccw(a0, ap) <= ccw(a0, a1) : ccw(ap, a0) <= ccw(a1, a0);
+                }
+                d = inside ? std::fabs(r - s.radius)
+                           : std::min(std::hypot(p.x - s.start.x, p.y - s.start.y), std::hypot(p.x - s.end.x, p.y - s.end.y));
+            }
+            best = std::min(best, d);
+        }
+        return best;
+    }
+}
+
+// Skipped unless asked for: set SCANTOALIBRE_STL to a symmetric scan and run
+//   ScanCoreTests.exe -tc="symmetric sections of a real scan*" --no-skip
+// Find Symmetry, its plane aligned onto YZ, then a section on XY and a
+// silhouette along Y, each with Symmetric on, as Frank tried in Alibre.
+TEST_CASE("symmetric sections of a real scan" * doctest::skip())
+{
+    char* value = nullptr;
+    size_t length = 0;
+    REQUIRE(_dupenv_s(&value, &length, "SCANTOALIBRE_STL") == 0);
+    REQUIRE(value != nullptr);
+    const std::string path(value);
+    free(value);
+    Mesh mesh;
+    ScanFileInfo info;
+    std::string message;
+    REQUIRE(ReadScanFile(path, mesh, info, message));
+    const OrientedBox box = FitOrientedBox(mesh);
+    const std::vector<SymmetryCandidate> found = FindSymmetryPlanes(mesh, box, {});
+    REQUIRE_FALSE(found.empty());
+    Feature target;
+    target.kind = Feature::Kind::Plane;
+    target.direction = { 1, 0, 0 };
+    AlignState state;
+    Transform move;
+    REQUIRE(AlignStep(found.front().plane, target, false, AxisToPlane::Square, state, move, message));
+    TransformMesh(mesh, move);
+    const Box3 b = Bounds(mesh);
+    for (int view = 0; view < 2; ++view)
+    {
+        const SectionFrame frame = view == 0 ? FrameForPlane({ 0, 0, 0.5 * (b.low.z + b.high.z) }, { 0, 0, 1 })
+                                             : FrameForPlane({ 0, 0, 0 }, { 0, 1, 0 });
+        SectionResult r = view == 0 ? SectionMesh(mesh, frame, 0.05, 0.01) : SilhouetteMesh(mesh, frame, 0.05, 0.01, 1.0);
+        SnapOptions options;
+        options.symmetric = true;
+        options.haveSymmetryLine = true;
+        // x = 0 in the frame.
+        options.symmetryPoint = frame.ToPlane({ 0, frame.origin.y, frame.origin.z });
+        const Point3 along = Normalised(Cross({ 1, 0, 0 }, frame.Normal()));
+        options.symmetryDirection = { Dot(along, frame.xAxis), Dot(along, frame.yAxis) };
+        size_t before = 0;
+        for (const Profile& p : r.profiles)
+            before += p.segments.size();
+        if (view == 0)
+            for (const ProfileSegment& seg : r.profiles[0].segments)
+                MESSAGE("as fitted: " << (seg.kind == ProfileSegment::Kind::Line ? "line" : "arc") << " (" << seg.start.x << ", "
+                        << seg.start.y << ") to (" << seg.end.x << ", " << seg.end.y << ") centre (" << seg.centre.x << ", "
+                        << seg.centre.y << ") r " << seg.radius << " fit r " << seg.fitRadius << " fit centre ("
+                        << seg.fitCentre.x << ", " << seg.fitCentre.y << ")" << (seg.anticlockwise ? " ccw" : " cw"));
+        double worstBefore = 0.0;
+        for (size_t i = 0; i < r.slices.size(); ++i)
+            for (const Point3& q : r.slices[i].points)
+                worstBefore = std::max(worstBefore, DistanceToProfile(frame.ToPlane(q), r.profiles[i]));
+        const std::vector<ProfileConstraint> constraints = ApplyDesignIntent(r, frame, 0.05, options);
+        double worst = 0.0, sum = 0.0;
+        size_t count = 0;
+        for (size_t i = 0; i < r.slices.size(); ++i)
+            for (const Point3& q : r.slices[i].points)
+            {
+                const double d = DistanceToProfile(frame.ToPlane(q), r.profiles[i]);
+                worst = std::max(worst, d);
+                sum += d * d;
+                ++count;
+            }
+        MESSAGE("slice points from the profiles: before, worst " << worstBefore << "; after, worst " << worst
+                << ", rms " << std::sqrt(sum / std::max<size_t>(count, 1)));
+        if (view == 0)
+            for (const ProfileSegment& seg : r.profiles[0].segments)
+                MESSAGE((seg.kind == ProfileSegment::Kind::Line ? "line" : "arc") << " (" << seg.start.x << ", " << seg.start.y
+                        << ") to (" << seg.end.x << ", " << seg.end.y << ") centre (" << seg.centre.x << ", " << seg.centre.y
+                        << ") r " << seg.radius << (seg.anticlockwise ? " ccw" : " cw"));
+        size_t after = 0, symmetric = 0;
+        for (const Profile& p : r.profiles)
+            after += p.segments.size();
+        for (const ProfileConstraint& c : constraints)
+            symmetric += c.kind == ProfileConstraint::Kind::Symmetric ? 1 : 0;
+        MESSAGE(std::string(view == 0 ? "section" : "silhouette") << ": " << r.profiles.size() << " loops, " << r.symmetricSplit
+                << " cut at the line, " << r.symmetricPaired << " pairs; " << before << " segments, then " << after
+                << "; " << symmetric << " symmetric constraints; largest deviation " << r.largestDeviation);
+    }
+}
+
+TEST_CASE("the symmetric intent joins a flat arc across the line and stays on the slice")
+{
+    // As in Frank's mt12cover section: the bottom is one arc of radius about 86
+    // across the axis, its fitted centre a little off it, then sides and a top.
+    const double kPi = 3.14159265358979323846;
+    unsigned seed = 11;
+    std::vector<Vec2> outline;
+    const Vec2 centre{ 0.3, 61.0 };
+    const double r = std::hypot(12.0 - centre.x, -24.0 - centre.y);
+    const double a0 = std::atan2(-24.0 - centre.y, -12.0 - centre.x);
+    const double a1 = std::atan2(-24.0 - centre.y, 12.0 - centre.x);
+    AddArcPoints(outline, centre, r, a0, a1, 0.05, 0.01, seed);
+    AddLinePoints(outline, { 12.0, -24.0 }, { 12.0, -18.0 }, 0.05, 0.01, seed);
+    AddLinePoints(outline, { 12.0, -18.0 }, { -12.0, -18.0 }, 0.05, 0.01, seed);
+    AddLinePoints(outline, { -12.0, -18.0 }, { -12.0, -24.0 }, 0.05, 0.01, seed);
+    SectionResult result;
+    result.slices.push_back(Slice(outline));
+    result.profiles.push_back(FitProfile(outline, true, 0.05));
+    SnapOptions options;
+    options.symmetric = true;
+    options.haveSymmetryLine = true;
+    options.symmetryPoint = { 0, 0 };
+    options.symmetryDirection = { 0, 1 };
+    ApplyDesignIntent(result, SectionFrame(), 0.05, options);
+
+    size_t arcs = 0;
+    for (const ProfileSegment& seg : result.profiles[0].segments)
+        if (seg.kind == ProfileSegment::Kind::Arc)
+        {
+            ++arcs;
+            CHECK(std::fabs(seg.centre.x) < 1e-9);
+        }
+    CHECK(arcs == 1);
+    double worst = 0.0;
+    for (const Vec2& p : outline)
+        worst = std::max(worst, DistanceToProfile(p, result.profiles[0]));
+    MESSAGE("worst " << worst << " mm from the slice; sides " << result.symmetricGap << " mm apart");
+    CHECK(worst < 0.06);
+}
+
+TEST_CASE("a radius dimension is the drawn arc's radius, not the free fit's")
+{
+    // Alibre's radial dimension keeps an arc's centre and sweep and scales it,
+    // so a value off the drawn arc moves it: Frank's mt12 section bottom arc,
+    // drawn at 98.86 with a free fit of 100.66, moved its ends 1.8 mm.
+    Profile profile;
+    ProfileSegment arc;
+    arc.kind = ProfileSegment::Kind::Arc;
+    arc.start = { -12.1941, -24.3247 };
+    arc.end = { 11.4381, -24.4215 };
+    arc.centre = { 0.0241, 73.7807 };
+    arc.radius = 98.8634;
+    arc.fitCentre = { 0.0320, 75.5843 };
+    arc.fitRadius = 100.664;
+    profile.segments.push_back(arc);
+    SnapOptions options;
+    options.roundTo = 0.1;
+    bool found = false;
+    for (const ProfileConstraint& c : FindConstraints({ profile }, options))
+        if (c.kind == ProfileConstraint::Kind::Radius)
+        {
+            found = true;
+            CHECK(c.value == doctest::Approx(98.9));
+        }
+    CHECK(found);
+}
+
+TEST_CASE("lines only: no arcs or circles, still within the tolerance")
+{
+    // A slot: two straight sides and round ends, and a lone circle.
+    const double kPi = 3.14159265358979323846;
+    unsigned seed = 5;
+    std::vector<Vec2> slot, circle;
+    AddLinePoints(slot, { -10, -3 }, { 10, -3 }, 0.1, 0.005, seed);
+    AddArcPoints(slot, { 10, 0 }, 3.0, -kPi / 2, kPi / 2, 0.1, 0.005, seed);
+    AddLinePoints(slot, { 10, 3 }, { -10, 3 }, 0.1, 0.005, seed);
+    AddArcPoints(slot, { -10, 0 }, 3.0, kPi / 2, 3 * kPi / 2, 0.1, 0.005, seed);
+    AddArcPoints(circle, { 0, 20 }, 4.0, 0.0, 2 * kPi, 0.1, 0.005, seed);
+    for (const auto* loop : { &slot, &circle })
+    {
+        const Profile withArcs = FitProfile(*loop, true, 0.05);
+        const Profile linesOnly = FitProfile(*loop, true, 0.05, false);
+        size_t rounds = 0;
+        for (const ProfileSegment& seg : withArcs.segments)
+            rounds += seg.kind != ProfileSegment::Kind::Line ? 1 : 0;
+        CHECK(rounds > 0);
+        for (const ProfileSegment& seg : linesOnly.segments)
+            CHECK(seg.kind == ProfileSegment::Kind::Line);
+        CHECK(linesOnly.segments.size() > withArcs.segments.size());
+        double worst = 0.0;
+        for (const Vec2& p : *loop)
+            worst = std::max(worst, DistanceToProfile(p, linesOnly));
+        CHECK(worst <= 0.06);
     }
 }

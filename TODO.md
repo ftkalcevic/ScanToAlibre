@@ -1,6 +1,6 @@
 # To do
 
-- Next: the saved plan in `docs\PLAN-next.md` (Delete fitted planes and axes, Find Symmetry and Mid Plane are built and tested; then 6 Silhouette, 7 Compare, symmetry Detect and the Symmetric design intent). Approved, under way.
+- Next: the saved plan in `docs\PLAN-next.md` (Delete fitted planes and axes, Find Symmetry and Mid Plane are built and tested; 6 Silhouette, 7 Compare, symmetry Detect and the Symmetric design intent are built, untested). Approved; every item built.
 - Answer the spec's open questions.
 - Decide whether Load still needs the `ScanToAlibre` parameter now that `HasPersistentDataToSave` lights Save.
 - Point clouds without normals: estimate the normals.

@@ -55,6 +55,8 @@ private:
     // Section: choose the box's or a fitted plane.
     bool PickFeature(ScanDocument& scan, long x, long y);
     bool GrowAt(ScanDocument& scan, long x, long y);
+    // Compare: the scan's distance from the part where the click meets it.
+    bool ProbeAt(ScanDocument& scan, long x, long y);
     // Surface: a smooth area or a brush's worth added to the selection, or taken away.
     bool SelectSurfaceAt(ScanDocument& scan, long x, long y);
     bool FitView(const ScanDocument& scan, scancore::ViewProjection& view);

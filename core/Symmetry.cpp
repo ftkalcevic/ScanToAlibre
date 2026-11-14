@@ -387,6 +387,27 @@ namespace scancore
         return result;
     }
 
+    std::array<SymmetryScore, 3> ScoreWorldPlanes(const Mesh& mesh, const SymmetryOptions& options)
+    {
+        std::array<SymmetryScore, 3> scores{};
+        const std::vector<Point3> samples = SurfaceSamples(mesh, options.samples);
+        if (samples.size() < 10)
+            return scores;
+        const Box3 bounds = Bounds(mesh);
+        const double search = (options.search > 0.0) ? options.search : std::max(1.0, 0.03 * Length(bounds.Size()));
+        const double spacing = std::sqrt(SurfaceArea(mesh) / static_cast<double>(mesh.triangles.size()));
+        const TriangleGrid grid(mesh, std::min(search / 4.0, std::max(3.0 * spacing, search / 16.0)));
+        const Point3 normals[3] = { { 0, 0, 1 }, { 1, 0, 0 }, { 0, 1, 0 } };
+        for (int k = 0; k < 3; ++k)
+        {
+            Feature plane;
+            plane.kind = Feature::Kind::Plane;
+            plane.direction = normals[k];
+            scores[static_cast<size_t>(k)] = ScoreMirror(grid, samples, plane, search, options.tolerance);
+        }
+        return scores;
+    }
+
     bool MidPlane(const Feature& a, const Feature& b, Feature& plane, std::string& message)
     {
         const double halfWidth = std::max(a.halfWidth, b.halfWidth);

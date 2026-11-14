@@ -9,10 +9,15 @@
 #include "ScanViewCommand.h"
 #include "Log.h"
 
+#include "Symmetry.h"
+
 #include "FileIO.h"
 #include "Iges.h"
 
 #include <chrono>
+#include <algorithm>
+#include <array>
+#include <iterator>
 #include <cmath>
 #include <cwchar>
 
@@ -89,6 +94,7 @@ BEGIN_MESSAGE_MAP(CSurfaceDlg, CStepDialog)
     ON_BN_CLICKED(IDC_SURF_SYM_XY, &CSurfaceDlg::OnOptionsChanged)
     ON_BN_CLICKED(IDC_SURF_SYM_YZ, &CSurfaceDlg::OnOptionsChanged)
     ON_BN_CLICKED(IDC_SURF_SYM_ZX, &CSurfaceDlg::OnOptionsChanged)
+    ON_BN_CLICKED(IDC_SURF_DETECT, &CSurfaceDlg::OnDetect)
     ON_BN_CLICKED(IDC_SURF_PROJECTION, &CSurfaceDlg::OnOptionsChanged)
     ON_BN_CLICKED(IDC_SURF_RECTANGLE, &CSurfaceDlg::OnOptionsChanged)
     ON_BN_CLICKED(IDC_SURF_BOX, &CSurfaceDlg::OnOptionsChanged)
@@ -462,4 +468,50 @@ void CSurfaceDlg::OnCreate()
         MessageBeep(MB_ICONWARNING);
     }
     RefreshScanViews();
+}
+
+void CSurfaceDlg::OnDetect()
+{
+    AFX_MANAGE_STATE(AfxGetStaticModuleState());
+    ScanDocument* pScan = FindScan(m_sessionId);
+    if (pScan == nullptr)
+        return;
+    SetStatus(L"Scoring the world planes as planes of symmetry...");
+    CWaitCursor wait;
+    const auto start = std::chrono::steady_clock::now();
+    scancore::SymmetryOptions options;
+    const std::array<scancore::SymmetryScore, 3> scores = scancore::ScoreWorldPlanes(pScan->mesh, options);
+    const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+
+    // Those with 80% within 0.2 mm, but not the base plane, and at most the best two.
+    const int ids[3] = { IDC_SURF_SYM_XY, IDC_SURF_SYM_YZ, IDC_SURF_SYM_ZX };
+    const wchar_t* names[3] = { L"XY", L"YZ", L"ZX" };
+    const double least = 0.8;
+    int order[3] = { 0, 1, 2 };
+    std::sort(std::begin(order), std::end(order), [&](int a, int b) { return scores[a].within > scores[b].within; });
+    int ticked = 0;
+    CString text;
+    for (int k = 0; k < 3; ++k)
+    {
+        pScan->detectedSymmetry[k] = scores[k].within >= least;
+        CString one;
+        one.Format(L"%s%s: %.0f%%", k == 0 ? L"" : L", ", names[k], 100.0 * scores[k].within);
+        text += one;
+    }
+    text += L" within 0.2 mm of the mirror image";
+    for (int k : order)
+    {
+        const bool use = scores[k].within >= least && GetDlgItem(ids[k])->IsWindowEnabled() && ticked < 2;
+        CheckDlgButton(ids[k], use ? BST_CHECKED : BST_UNCHECKED);
+        ticked += use ? 1 : 0;
+    }
+    SetDlgItemText(IDC_SURF_SYMMETRY_SCORE, text);
+    Log(L"[surface] detect: XY %.1f%%, YZ %.1f%%, ZX %.1f%% within %.2f mm (rms %.4f, %.4f, %.4f mm); %d ticked; "
+        L"%.2f s",
+        100.0 * scores[0].within, 100.0 * scores[1].within, 100.0 * scores[2].within, options.tolerance,
+        scores[0].rms, scores[1].rms, scores[2].rms, ticked, seconds);
+    OnOptionsChanged();
+    if (ticked == 0)
+        SetStatus(L"No world plane is a plane of symmetry (80% within 0.2 mm). Align the scan's symmetry plane to "
+                  L"one in Orient first.");
 }

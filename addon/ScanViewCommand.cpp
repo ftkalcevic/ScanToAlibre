@@ -6,10 +6,12 @@
 #include "ScanDocument.h"
 #include "Log.h"
 
+#include "CompareDialog.h"
 #include "OrientDialog.h"
 #include "SectionDialog.h"
 #include "SurfaceDialog.h"
 #include "ScanDisplayCommand.h"
+#include "StepDialog.h"
 
 #include "Orient.h"
 #include "Section.h"
@@ -20,6 +22,7 @@
 #include <algorithm>
 #include <cmath>
 #include <iterator>
+#include <limits>
 #include <set>
 #include <vector>
 
@@ -259,8 +262,46 @@ STDMETHODIMP CScanViewCommand::On3DRender()
         {
             try
             {
-                // Show Scan draws the scan while it's on; this draws only what's over it.
-                const ScanDocument::DrawArrays* pArrays = ScanDisplayOn(m_sessionId) ? nullptr : pScan->Arrays();
+                // Compare: the scan in colour bands, drawn over the part so what's
+                // inside it shows too (in place of the plain scan).
+                bool banded = false;
+                if (pScan->comparing)
+                {
+                    static const wchar_t* const kBandNames[scancore::kDeviationBands] = {
+                        L"Compare far inside", L"Compare inside", L"Compare just inside", L"Compare within tolerance",
+                        L"Compare just outside", L"Compare outside", L"Compare far outside", L"Compare not compared"
+                    };
+                    for (int band = 0; band < scancore::kDeviationBands; ++band)
+                    {
+                        const ScanDocument::DrawArrays* pBand = pScan->BandArrays(band);
+                        if (pBand == nullptr)
+                            continue;
+                        long rgb[3];
+                        DeviationColour(band, rgb);
+                        DrawMeshArrays(canvas, AddSegment(canvas, kBandNames[band], rgb[0], rgb[1], rgb[2], true),
+                                       *pBand);
+                        banded = true;
+                    }
+                    if (pScan->compare.haveProbe)
+                    {
+                        const __int64 probe = AddSegment(canvas, L"Compare probe", 230, 30, 230, true);
+                        const double unit = pScan->MillimetresPerUnit();
+                        const Point3& p = pScan->compare.probe;
+                        canvas->DrawMarker(probe, static_cast<float>(p.x / unit), static_cast<float>(p.y / unit),
+                                           static_cast<float>(p.z / unit), 16, MarkerType_MARKER_ASTERISK);
+                    }
+                }
+
+                // Show Scan draws the scan while it's on; this draws only what's
+                // over it. With Show Scan off, this draws the scan only while one
+                // of our dialogs is open for the part and the user hasn't hidden
+                // it, as this command outlives the dialog (until a native command
+                // such as Measure ends it) and kept the scan showing.
+                const CStepDialog* pDialog = OpenStepDialog();
+                const bool dialogOpen = pDialog != nullptr && pDialog->SessionId() == m_sessionId;
+                const ScanDocument::DrawArrays* pArrays =
+                    (banded || ScanDisplayOn(m_sessionId) || pScan->scanHidden || !dialogOpen) ? nullptr
+                                                                                                 : pScan->Arrays();
                 if (pArrays != nullptr)
                 {
                     // Hidden by the model, like a part, so features built on it show.
@@ -276,9 +317,9 @@ STDMETHODIMP CScanViewCommand::On3DRender()
 
                 if (pScan->orienting)
                     DrawOrient(canvas, *pScan, false);
-                else if (pScan->sectioning && pScan->clickMode == ScanDocument::ClickMode::Scan)
+                else if (pScan->Sectioning() && pScan->clickMode == ScanDocument::ClickMode::Scan)
                     DrawOrient(canvas, *pScan, true);
-                if (pScan->sectioning)
+                if (pScan->Sectioning())
                     DrawSection(canvas, *pScan);
                 if (pScan->surfacing)
                     DrawSurface(canvas, *pScan);
@@ -335,7 +376,7 @@ STDMETHODIMP CScanViewCommand::OnClick(long screenX, long screenY, enum ADDONMou
             ProbeScreenToWorld(screenX, screenY);
         }
         bool handled = false;
-        if (pScan->clickMode == ScanDocument::ClickMode::Scan && (pScan->orienting || pScan->sectioning))
+        if (pScan->clickMode == ScanDocument::ClickMode::Scan && (pScan->orienting || pScan->Sectioning()))
             handled = PickFeature(*pScan, screenX, screenY);
         else if (pScan->orienting && pScan->clickMode == ScanDocument::ClickMode::MidPlane)
         {
@@ -349,7 +390,9 @@ STDMETHODIMP CScanViewCommand::OnClick(long screenX, long screenY, enum ADDONMou
         else if (pScan->surfacing && (pScan->clickMode == ScanDocument::ClickMode::Smooth ||
                                       pScan->clickMode == ScanDocument::ClickMode::Brush))
             handled = SelectSurfaceAt(*pScan, screenX, screenY);
-        else if (!pScan->orienting && !pScan->sectioning && !pScan->surfacing)
+        else if (pScan->comparing && pScan->clickMode == ScanDocument::ClickMode::Probe)
+            handled = ProbeAt(*pScan, screenX, screenY);
+        else if (!pScan->orienting && !pScan->Sectioning() && !pScan->surfacing && !pScan->comparing)
             handled = Pick(*pScan, screenX, screenY);
         // A hit is ours; anything else is left to Alibre, which selects what's
         // there (with To down, its planes, axes and points become the target in
@@ -409,7 +452,7 @@ bool CScanViewCommand::PickFeature(ScanDocument& scan, long x, long y)
     for (size_t i = 0; i < features.size(); ++i)
     {
         const Feature& f = features[i];
-        if (scan.sectioning && f.kind != Feature::Kind::Plane)
+        if (scan.Sectioning() && f.kind != Feature::Kind::Plane)
             continue;
         if (f.kind == Feature::Kind::Axis)
         {
@@ -475,10 +518,10 @@ bool CScanViewCommand::PickFeature(ScanDocument& scan, long x, long y)
         return false;
     }
     scan.chosen = best;
-    if (scan.sectioning)
+    if (scan.Sectioning())
     {
         const Feature& f = features[best];
-        ScanDocument::Section& section = scan.section;
+        ScanDocument::Section& section = *scan.ActiveSection();
         section.havePlane = true;
         section.planeName = f.name;
         section.point = f.point;
@@ -490,13 +533,57 @@ bool CScanViewCommand::PickFeature(ScanDocument& scan, long x, long y)
         Log(L"[section] plane %S: %zu polylines, %zu points, largest deviation %.4f mm, %.0f ms", f.name.c_str(),
             section.result.profiles.size(), section.result.slicePoints, section.result.largestDeviation,
             Milliseconds(start));
-        SectionViewChanged();
+        scan.clickMode = ScanDocument::ClickMode::None;     // one pick a press
+        SectionPlanePicked();
     }
     else
     {
         Log(L"[orient] chose %S", features[best].name.c_str());
         OrientViewChanged();
     }
+    m_site->InvalidateCanvas();
+    return true;
+}
+
+bool CScanViewCommand::ProbeAt(ScanDocument& scan, long x, long y)
+{
+    scancore::ViewProjection view;
+    if (!FitView(scan, view))
+        return false;
+    const scancore::RayHit hit = scancore::IntersectLine(scan.mesh, view.LineThrough(x, y));
+    if (!hit.hit)
+        return false;
+    ScanDocument::Compare& c = scan.compare;
+    const auto& tri = scan.mesh.triangles[static_cast<size_t>(hit.triangle)];
+    double value = std::numeric_limits<double>::quiet_NaN();
+    if (c.meshValues.size() == scan.mesh.vertices.size())
+    {
+        // The corners' distances, weighted by where the click is in the triangle.
+        const Point3& a = scan.mesh.vertices[static_cast<size_t>(tri[0])];
+        const Point3& b = scan.mesh.vertices[static_cast<size_t>(tri[1])];
+        const Point3& d = scan.mesh.vertices[static_cast<size_t>(tri[2])];
+        const Point3 normal = scancore::Cross(b - a, d - a);
+        const double area = scancore::Dot(normal, normal);
+        if (area > 0.0)
+        {
+            const double wa = scancore::Dot(scancore::Cross(b - hit.point, d - hit.point), normal) / area;
+            const double wb = scancore::Dot(scancore::Cross(d - hit.point, a - hit.point), normal) / area;
+            const double wc = 1.0 - wa - wb;
+            const float va = c.meshValues[static_cast<size_t>(tri[0])];
+            const float vb = c.meshValues[static_cast<size_t>(tri[1])];
+            const float vc = c.meshValues[static_cast<size_t>(tri[2])];
+            if (!std::isnan(va) && !std::isnan(vb) && !std::isnan(vc))
+                value = wa * va + wb * vb + wc * vc;
+        }
+    }
+    if (std::fabs(value) > c.range)
+        value = std::numeric_limits<double>::quiet_NaN();
+    c.haveProbe = true;
+    c.probe = hit.point;
+    c.probeValue = value;
+    Log(L"[compare] probe at (%.3f, %.3f, %.3f) on triangle %d: %s%.4f mm", hit.point.x, hit.point.y, hit.point.z,
+        hit.triangle, std::isnan(value) ? L"not modelled " : L"", std::isnan(value) ? 0.0 : value);
+    CompareViewChanged();
     m_site->InvalidateCanvas();
     return true;
 }
@@ -673,9 +760,10 @@ void CScanViewCommand::DrawOrient(IADAddOnCanvasDisplay* pCanvas, ScanDocument& 
 
 void CScanViewCommand::DrawSection(IADAddOnCanvasDisplay* pCanvas, ScanDocument& scan)
 {
-    const ScanDocument::Section& section = scan.section;
-    if (!section.havePlane)
+    const ScanDocument::Section* pSection = scan.ActiveSection();
+    if (pSection == nullptr || !pSection->havePlane)
         return;
+    const ScanDocument::Section& section = *pSection;
     const double unit = scan.MillimetresPerUnit();
     const scancore::SectionFrame& frame = section.frame;
     using scancore::Vec2;
@@ -754,7 +842,10 @@ void CScanViewCommand::ReadSectionPlane(ScanDocument& scan)
     IDispatchPtr target = (proxy != nullptr) ? proxy->GetTarget() : item;
     const double unit = scan.MillimetresPerUnit();
 
-    ScanDocument::Section& section = scan.section;
+    ScanDocument::Section* pSection = scan.ActiveSection();
+    if (pSection == nullptr)
+        return;
+    ScanDocument::Section& section = *pSection;
     Point3 point, normal;
     std::string name;
     bool face = false;
@@ -824,7 +915,8 @@ void CScanViewCommand::ReadSectionPlane(ScanDocument& scan)
         name.c_str(), point.x, point.y, point.z, section.normal.x, section.normal.y, section.normal.z,
         section.result.profiles.size(), section.result.slicePoints, section.result.largestDeviation,
         Milliseconds(start));
-    SectionViewChanged();
+    scan.clickMode = ScanDocument::ClickMode::None;     // one pick a press
+    SectionPlanePicked();
     if (m_site != nullptr)
         m_site->InvalidateCanvas();
 }
@@ -834,7 +926,7 @@ STDMETHODIMP CScanViewCommand::OnSelectionChange()
     AFX_MANAGE_STATE(AfxGetStaticModuleState());
 
     ScanDocument* pScan = FindScan(m_sessionId);
-    if (pScan != nullptr && pScan->sectioning && pScan->clickMode == ScanDocument::ClickMode::Target &&
+    if (pScan != nullptr && pScan->Sectioning() && pScan->clickMode == ScanDocument::ClickMode::Target &&
         theApp.m_pRoot != nullptr)
     {
         try

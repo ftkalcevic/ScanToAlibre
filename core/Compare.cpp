@@ -6,6 +6,8 @@
 #include <cmath>
 #include <execution>
 #include <limits>
+#include <map>
+#include <tuple>
 #include <numeric>
 
 namespace scancore
@@ -223,5 +225,79 @@ namespace scancore
                 values[i] = static_cast<float>(n.signedDistance);
         });
         return values;
+    }
+
+    Mesh MeshFromFacets(const std::vector<double>& values, double millimetresPerUnit)
+    {
+        Mesh mesh;
+        std::map<std::tuple<long long, long long, long long>, int> joined;
+        auto corner = [&](size_t at) {
+            const Point3 p{ values[at] * millimetresPerUnit, values[at + 1] * millimetresPerUnit,
+                            values[at + 2] * millimetresPerUnit };
+            const auto key = std::make_tuple(std::llround(p.x * 1e6), std::llround(p.y * 1e6), std::llround(p.z * 1e6));
+            const auto found = joined.find(key);
+            if (found != joined.end())
+                return found->second;
+            const int index = static_cast<int>(mesh.vertices.size());
+            mesh.vertices.push_back(p);
+            joined.emplace(key, index);
+            return index;
+        };
+        for (size_t i = 0; i + 8 < values.size(); i += 9)
+        {
+            bool finite = true;
+            for (size_t k = 0; k < 9; ++k)
+                finite = finite && std::isfinite(values[i + k]);
+            if (!finite)
+                continue;
+            const std::array<int, 3> tri{ corner(i), corner(i + 3), corner(i + 6) };
+            if (tri[0] != tri[1] && tri[1] != tri[2] && tri[0] != tri[2])
+                mesh.triangles.push_back(tri);
+        }
+        double volume = 0.0;
+        for (const auto& t : mesh.triangles)
+            volume += Dot(mesh.vertices[static_cast<size_t>(t[0])],
+                          Cross(mesh.vertices[static_cast<size_t>(t[1])], mesh.vertices[static_cast<size_t>(t[2])]));
+        if (volume < 0.0)
+            for (auto& t : mesh.triangles)
+                std::swap(t[1], t[2]);
+        return mesh;
+    }
+
+    DeviationStats DeviationStatistics(const std::vector<float>& values, double tolerance)
+    {
+        DeviationStats stats;
+        double sumSquared = 0.0;
+        size_t within = 0;
+        for (float value : values)
+        {
+            if (std::isnan(value))
+            {
+                ++stats.notCompared;
+                continue;
+            }
+            ++stats.compared;
+            stats.largestPositive = std::max(stats.largestPositive, static_cast<double>(value));
+            stats.largestNegative = std::min(stats.largestNegative, static_cast<double>(value));
+            sumSquared += static_cast<double>(value) * value;
+            within += (std::fabs(value) <= tolerance) ? 1 : 0;
+        }
+        if (stats.compared > 0)
+        {
+            stats.rms = std::sqrt(sumSquared / static_cast<double>(stats.compared));
+            stats.within = static_cast<double>(within) / static_cast<double>(stats.compared);
+        }
+        return stats;
+    }
+
+    int DeviationBand(double value, double tolerance, double range)
+    {
+        if (std::isnan(value) || std::fabs(value) > range)
+            return kDeviationGrey;
+        if (std::fabs(value) <= tolerance)
+            return 3;
+        if (value < 0.0)
+            return (value < -2.0 * range / 3.0) ? 0 : (value < -range / 3.0 ? 1 : 2);
+        return (value > 2.0 * range / 3.0) ? 6 : (value > range / 3.0 ? 5 : 4);
     }
 }

@@ -23,6 +23,7 @@ struct SketchReport
     std::wstring sketchName;
     std::wstring planeName;         // what the sketch is on
     size_t lines = 0, arcs = 0, circles = 0, reference = 0;
+    size_t rawLines = 0;            // the raw slice as ordinary lines (Create Raw Sketch without Fitted)
     size_t constraints = 0, constraintsRefused = 0;
     size_t dimensions = 0, dimensionsRefused = 0;
     double largestDeviation = 0.0;  // mm

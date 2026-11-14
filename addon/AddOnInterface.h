@@ -7,6 +7,9 @@
 //     2 Refine              (leaf, id 105)  -> parts with a scan: decimate and smooth (a modeless dialog)
 //     3 Orient              (leaf, id 106)  -> parts with a scan: move, rotate, scale, fit planes, align (a modeless dialog)
 //     4 Section             (leaf, id 107)  -> parts with a scan: slice it with a plane, fit lines and arcs, make a sketch (a modeless dialog)
+//     5 Surface             (leaf, id 108)  -> parts with a scan: fit a B-spline surface to areas of it and insert it (a modeless dialog)
+//     6 Silhouette          (leaf, id 109)  -> parts with a scan: its outline along a plane's normal as a sketch (Section's dialog)
+//     7 Compare             (leaf, id 110)  -> parts with a scan: the scan coloured by its distance from the part (a modeless dialog)
 //     Show Scan             (leaf, id 104)  -> parts with a scan: a two-way toggle that draws the scan through native commands
 //     About                 (leaf, id 101)  -> stateless command: shows About box
 // Insert Test Surface (id 102) proved surface insertion and is no longer on the ribbon.
@@ -23,6 +26,8 @@ const long MENU_ID_REFINE       = 105;
 const long MENU_ID_ORIENT       = 106;
 const long MENU_ID_SECTION      = 107;
 const long MENU_ID_SURFACE      = 108;
+const long MENU_ID_SILHOUETTE   = 109;
+const long MENU_ID_COMPARE      = 110;
 
 // Oldest Alibre build this add-on is written against (27.0.1.27039).
 const long MINIMUM_ALIBRE_BUILD = 27039;

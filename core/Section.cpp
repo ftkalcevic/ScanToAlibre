@@ -3,6 +3,7 @@
 #include "Section.h"
 
 #include <algorithm>
+#include <utility>
 #include <cmath>
 #include <cstdint>
 #include <unordered_map>
@@ -527,7 +528,7 @@ namespace scancore
     namespace
     {
         // Lines and arcs along the points, greedily, then with their joins refined.
-        std::vector<ProfileSegment> FitRuns(const std::vector<Vec2>& p, double tolerance)
+        std::vector<ProfileSegment> FitRuns(const std::vector<Vec2>& p, double tolerance, bool arcs)
         {
             std::vector<ProfileSegment> segments;
             const int last = static_cast<int>(p.size()) - 1;
@@ -535,13 +536,14 @@ namespace scancore
             while (i < last)
             {
                 const int lineEnd = Furthest(i, last, [&](int j) { return LineFits(p, i, j, tolerance); });
-                const int arcEnd = Furthest(i, last, [&](int j) { return j - i < 3 || ArcFits(p, i, j, tolerance); });
+                const int arcEnd =
+                    arcs ? Furthest(i, last, [&](int j) { return j - i < 3 || ArcFits(p, i, j, tolerance); }) : i;
                 ProfileSegment segment;
                 double deviation = 0.0;     // unused here
                 int end = lineEnd;
                 // An arc only where it reaches clearly further than a line: a
                 // big arc can follow a line a little way round a corner.
-                const bool arcFurther = arcEnd > lineEnd + 2 && (arcEnd - i) * 4 > (lineEnd - i) * 5;
+                const bool arcFurther = arcs && arcEnd > lineEnd + 2 && (arcEnd - i) * 4 > (lineEnd - i) * 5;
                 if (arcFurther && ArcFits(p, i, arcEnd, tolerance, &segment, &deviation))
                 {
                     end = arcEnd;
@@ -563,7 +565,7 @@ namespace scancore
         }
     }
 
-    Profile FitProfile(const std::vector<Vec2>& input, bool closed, double tolerance)
+    Profile FitProfile(const std::vector<Vec2>& input, bool closed, double tolerance, bool arcs)
     {
         Profile profile;
         profile.closed = closed;
@@ -590,7 +592,7 @@ namespace scancore
             std::rotate(p.begin(), p.begin() + sharpest, p.end());
             sharpestAt = sharpest;
 
-            if (turn < 20.0 * kPi / 180.0 && p.size() >= 8)
+            if (arcs && turn < 20.0 * kPi / 180.0 && p.size() >= 8)
             {
                 // Fit a circle to every point (Kasa, about the mean).
                 double mx = 0.0, my = 0.0;
@@ -641,7 +643,7 @@ namespace scancore
         }
 
         size_t offset = 0;      // input index of p[0]
-        std::vector<ProfileSegment> segments = FitRuns(p, tolerance);
+        std::vector<ProfileSegment> segments = FitRuns(p, tolerance, arcs);
         double merged = 0.0;
         if (closed)
         {
@@ -656,7 +658,7 @@ namespace scancore
                 std::rotate(p.begin(), p.begin() + start, p.end());
                 p.push_back(p.front());
                 offset = (sharpestAt + start) % n;
-                segments = FitRuns(p, tolerance);
+                segments = FitRuns(p, tolerance, arcs);
                 merged = MergeAcrossStart(p, segments, tolerance);
             }
             else
@@ -729,7 +731,9 @@ namespace scancore
                     c.kind = ProfileConstraint::Kind::Radius;
                     c.profile = c.otherProfile = pi;
                     c.segment = c.otherSegment = s;
-                    c.value = RoundTo(seg.fitRadius > 0.0 ? seg.fitRadius : seg.radius, options.roundTo);
+                    // The drawn arc's radius (through its ends), not the free fit's: on Frank's mt12
+                    // section they differed by up to 1.8 mm, and the dimension pulled the sketch 1.2 mm off.
+                    c.value = RoundTo(seg.radius, options.roundTo);
                     constraints.push_back(c);
                 }
                 // Tangent to the next segment, where at least one is an arc.
@@ -766,7 +770,7 @@ namespace scancore
                     if (profiles[pi].segments[s].kind != ProfileSegment::Kind::Line)
                     {
                         const ProfileSegment& seg = profiles[pi].segments[s];
-                        rounds.push_back({ pi, s, seg.fitRadius > 0.0 ? seg.fitCentre : seg.centre });
+                        rounds.push_back({ pi, s, seg.centre });     // the drawn centre, which the constraint joins
                     }
             std::vector<char> grouped(rounds.size(), 0);
             for (size_t a = 0; a < rounds.size(); ++a)
@@ -788,6 +792,358 @@ namespace scancore
                 }
             }
         }
+        return constraints;
+    }
+
+    std::vector<ProfileConstraint> MakeSymmetric(SectionResult& result, const SectionFrame& frame, double tolerance,
+                                                 const SnapOptions& options)
+    {
+        std::vector<ProfileConstraint> constraints;
+        result.symmetricSplit = result.symmetricPaired = 0;
+        result.symmetricGap = 0.0;
+        if (!options.symmetric || !options.haveSymmetryLine)
+            return constraints;
+        const Vec2 along = Unit2(options.symmetryDirection);
+        if (Length2(along) < 0.5)
+            return constraints;
+        const Vec2 across{ -along.y, along.x };
+        const Vec2 origin = options.symmetryPoint;
+        auto side = [&](const Vec2& p) { return Dot2(p - origin, across); };
+        auto mirror = [&](const Vec2& p) { return p - across * (2.0 * side(p)); };
+        auto mirrorDirection = [&](const Vec2& d) { return d - across * (2.0 * Dot2(d, across)); };
+        const double square = std::sin(options.symmetryDegrees * kPi / 180.0);
+
+        // A segment mirrored and run the other way: the loop's orientation is kept.
+        auto mirrored = [&](const ProfileSegment& s) {
+            ProfileSegment m = s;
+            m.start = mirror(s.end);
+            m.end = mirror(s.start);
+            m.centre = mirror(s.centre);
+            if (s.kind == ProfileSegment::Kind::Circle)
+                m.start = m.end = mirror(s.start);
+            m.fitPoint = mirror(s.fitPoint);
+            m.fitDirection = mirrorDirection(s.fitDirection) * -1.0;
+            m.fitCentre = mirror(s.fitCentre);
+            return m;
+        };
+        auto mirroredProfile = [&](const Profile& p) {
+            Profile m = p;
+            m.segments.clear();
+            for (size_t k = p.segments.size(); k-- > 0;)
+                m.segments.push_back(mirrored(p.segments[k]));
+            return m;
+        };
+
+        std::vector<std::vector<Vec2>> loops(result.slices.size());
+        for (size_t i = 0; i < result.slices.size(); ++i)
+            for (const Point3& p : result.slices[i].points)
+                loops[i].push_back(frame.ToPlane(p));
+        std::vector<char> changed(result.profiles.size(), 0);
+
+        // 1. Loops crossing the line twice: one half fitted, and its mirror image the other half.
+        for (size_t i = 0; i < loops.size() && i < result.profiles.size(); ++i)
+        {
+            const std::vector<Vec2>& q = loops[i];
+            if (!result.slices[i].closed || q.size() < 6)
+                continue;
+            std::vector<size_t> crossings;      // edge k: from point k to k + 1
+            for (size_t k = 0; k < q.size(); ++k)
+                if ((side(q[k]) >= 0.0) != (side(q[(k + 1) % q.size()]) >= 0.0))
+                    crossings.push_back(k);
+            if (crossings.size() != 2)
+                continue;
+            auto cut = [&](size_t k) {
+                const Vec2& a = q[k];
+                const Vec2& b = q[(k + 1) % q.size()];
+                const double t = side(a) / (side(a) - side(b));
+                return mirror(a + (b - a) * t) * 0.5 + (a + (b - a) * t) * 0.5;     // exactly on the line
+            };
+            // The two halves, each from one cut round to the other.
+            std::vector<Vec2> halves[2];
+            for (int h = 0; h < 2; ++h)
+            {
+                const size_t from = crossings[h], to = crossings[1 - h];
+                std::vector<Vec2>& half = halves[h];
+                half.push_back(cut(from));
+                for (size_t k = (from + 1) % q.size();; k = (k + 1) % q.size())
+                {
+                    half.push_back(q[k]);
+                    if (k == to)
+                        break;
+                }
+                half.push_back(cut(to));
+            }
+            // The two halves averaged: each point of the denser half moved halfway
+            // to the nearest point of the other half's mirror image, so a scan
+            // that isn't quite symmetric is missed by half as much either side
+            // (fitting one half and mirroring it was 0.2 mm off the other side of
+            // Frank's silhouette).
+            const int base = halves[0].size() >= halves[1].size() ? 0 : 1;
+            std::vector<Vec2> other;            // the other half mirrored, run the same way as the base
+            for (size_t k = halves[1 - base].size(); k-- > 0;)
+                other.push_back(mirror(halves[1 - base][k]));
+            std::vector<Vec2> averaged = halves[base];
+            const double reach = std::max(1.0, 20.0 * tolerance);
+            size_t from = 0;                    // where along the other the last point was found
+            for (size_t k = 1; k + 1 < averaged.size(); ++k)
+            {
+                const Vec2 p = halves[base][k];
+                double best = reach;
+                Vec2 nearest = p;
+                size_t bestAt = from;
+                // Search forward from the last match, a while past it.
+                for (size_t j = from; j + 1 < other.size() && j < from + 400; ++j)
+                {
+                    const Vec2 a = other[j], ab = other[j + 1] - a;
+                    const double l2 = Dot2(ab, ab);
+                    const double t = l2 > 0.0 ? std::clamp(Dot2(p - a, ab) / l2, 0.0, 1.0) : 0.0;
+                    const Vec2 q2 = a + ab * t;
+                    const double d = Length2(p - q2);
+                    if (d < best)
+                    {
+                        best = d;
+                        nearest = q2;
+                        bestAt = j;
+                    }
+                }
+                if (best < reach)
+                {
+                    averaged[k] = (p + nearest) * 0.5;
+                    from = bestAt;
+                    result.symmetricGap = std::max(result.symmetricGap, best);
+                }
+            }
+            const Profile half = FitProfile(averaged, false, tolerance, options.fitArcs);
+            const size_t m = half.segments.size();
+            if (m == 0)
+                continue;
+
+            // Where a segment meets its own mirror at the line, one segment across
+            // it: a line within symmetryDegrees of square to the line, or an arc
+            // that turns no more than that at the line (its centre within
+            // radius x sin(symmetryDegrees) of it; within the tolerance missed
+            // Frank's radius 86 arc, 0.56 mm off, which then had a kink there).
+            auto acrossLine = [&](const ProfileSegment& s) {
+                if (s.kind == ProfileSegment::Kind::Line)
+                    return std::fabs(Dot2(Unit2(s.end - s.start), along)) <= square;
+                if (s.kind == ProfileSegment::Kind::Arc)
+                    return std::fabs(side(s.centre)) <= square * s.radius;
+                return false;
+            };
+            // From the half's far end across to its mirror (or from the mirror's
+            // near end across to the half's start). An arc is fitted again to its
+            // points and their mirror images, as a circle through its two new ends
+            // (whose centre is then on the line).
+            auto merged = [&](const ProfileSegment& s, bool atStart) {
+                ProfileSegment t = s;
+                if (atStart)
+                    t.start = mirror(s.end);        // the mirror's end, across to s's end
+                else
+                    t.end = mirror(s.start);        // s's start, across to its mirror
+                if (s.kind == ProfileSegment::Kind::Arc)
+                {
+                    const int first = std::clamp(s.firstPoint, 0, static_cast<int>(averaged.size()) - 1);
+                    const int last = std::clamp(s.lastPoint, first, static_cast<int>(averaged.size()) - 1);
+                    std::vector<Vec2> pts(averaged.begin() + first, averaged.begin() + last + 1);
+                    std::vector<Vec2> run;
+                    if (atStart)
+                    {
+                        // From the mirror of s's end, back through the line, to s's end.
+                        for (size_t k = pts.size(); k-- > 1;)
+                            run.push_back(mirror(pts[k]));
+                        run.insert(run.end(), pts.begin(), pts.end());
+                    }
+                    else
+                    {
+                        run = pts;
+                        for (size_t k = pts.size() - 1; k-- > 0;)
+                            run.push_back(mirror(pts[k]));
+                    }
+                    run.front() = t.start;
+                    run.back() = t.end;
+                    const Vec2 across0 = atStart ? s.start : s.end;     // where it crosses the line
+                    Vec2 centre;
+                    double radius = 0.0;
+                    if (run.size() >= 3 && CircleThroughEnds(run, 0, static_cast<int>(run.size()) - 1, centre, radius))
+                        t.centre = mirror(centre) * 0.5 + centre * 0.5;
+                    else
+                        t.centre = mirror(s.centre) * 0.5 + s.centre * 0.5;
+                    t.radius = Length2(t.end - t.centre);
+                    // The way round that passes where it crossed the line.
+                    const double a0 = std::atan2(t.start.y - t.centre.y, t.start.x - t.centre.x);
+                    const double a1 = std::atan2(t.end.y - t.centre.y, t.end.x - t.centre.x);
+                    const double am = std::atan2(across0.y - t.centre.y, across0.x - t.centre.x);
+                    auto turn = [&](double from, double to) {
+                        double v = to - from;
+                        while (v < 0.0)
+                            v += 2.0 * kPi;
+                        while (v >= 2.0 * kPi)
+                            v -= 2.0 * kPi;
+                        return v;
+                    };
+                    t.anticlockwise = turn(a0, am) <= turn(a0, a1);
+                    t.fitCentre = t.centre;
+                    t.fitRadius = t.radius;
+                }
+                else
+                {
+                    t.fitPoint = (t.start + t.end) * 0.5;
+                    t.fitDirection = Unit2(t.end - t.start);
+                }
+                return t;
+            };
+            Profile full;
+            full.closed = true;
+            full.largestDeviation = half.largestDeviation;
+            if (m == 1 && half.segments[0].kind == ProfileSegment::Kind::Arc && acrossLine(half.segments[0]))
+            {
+                // Half a circle: the whole circle.
+                ProfileSegment c = half.segments[0];
+                c.kind = ProfileSegment::Kind::Circle;
+                c.centre = mirror(c.centre) * 0.5 + c.centre * 0.5;
+                c.radius = 0.5 * (Length2(c.start - c.centre) + Length2(c.end - c.centre));
+                c.start = c.end = Vec2{ c.centre.x + c.radius, c.centre.y };
+                c.fitCentre = c.centre;
+                c.fitRadius = c.radius;
+                full.segments.push_back(c);
+            }
+            else
+            {
+                const bool mergeStart = m > 1 && acrossLine(half.segments.front());
+                const bool mergeEnd = m > 1 && acrossLine(half.segments.back());
+                // The half (its first and last perhaps reaching across), then the mirror's middle.
+                for (size_t k = 0; k < m; ++k)
+                {
+                    if (k == 0 && mergeStart)
+                        full.segments.push_back(merged(half.segments[k], true));
+                    else if (k + 1 == m && mergeEnd)
+                        full.segments.push_back(merged(half.segments[k], false));
+                    else
+                        full.segments.push_back(half.segments[k]);
+                }
+                for (size_t k = m; k-- > 0;)
+                {
+                    if ((k + 1 == m && mergeEnd) || (k == 0 && mergeStart))
+                        continue;
+                    full.segments.push_back(mirrored(half.segments[k]));
+                }
+            }
+            result.profiles[i] = full;
+            changed[i] = 1;
+            ++result.symmetricSplit;
+        }
+
+        // 2. Loops wholly on one side, paired with their mirror image: one fit for both.
+        auto areaOf = [](const std::vector<Vec2>& loop) {
+            double a = 0.0;
+            for (size_t k = 0; k < loop.size(); ++k)
+            {
+                const Vec2& p = loop[k];
+                const Vec2& n = loop[(k + 1) % loop.size()];
+                a += p.x * n.y - n.x * p.y;
+            }
+            return 0.5 * a;
+        };
+        auto centroidOf = [](const std::vector<Vec2>& loop) {
+            Vec2 c;
+            for (const Vec2& p : loop)
+                c = c + p;
+            return c * (1.0 / static_cast<double>(loop.size()));
+        };
+        std::vector<char> pairedLoop(loops.size(), 0);
+        for (size_t a = 0; a < loops.size(); ++a)
+        {
+            if (changed[a] || pairedLoop[a] || !result.slices[a].closed || loops[a].size() < 3 || a >= result.profiles.size())
+                continue;
+            const double areaA = areaOf(loops[a]);
+            const Vec2 centreA = centroidOf(loops[a]);
+            if (std::fabs(side(centreA)) <= tolerance)
+                continue;
+            size_t best = loops.size();
+            double bestDistance = 0.0;
+            for (size_t b = a + 1; b < loops.size() && b < result.profiles.size(); ++b)
+            {
+                if (changed[b] || pairedLoop[b] || !result.slices[b].closed || loops[b].size() < 3)
+                    continue;
+                const double areaB = areaOf(loops[b]);
+                if ((areaA > 0.0) != (areaB > 0.0) ||
+                    std::fabs(std::fabs(areaA) - std::fabs(areaB)) > 0.1 * std::fabs(areaA))
+                    continue;
+                const double d = Length2(centreA - mirror(centroidOf(loops[b])));
+                const double allowed = std::max(5.0 * tolerance, 0.05 * std::sqrt(std::fabs(areaA)));
+                if (d <= allowed && (best == loops.size() || d < bestDistance))
+                {
+                    best = b;
+                    bestDistance = d;
+                }
+            }
+            if (best == loops.size())
+                continue;
+            const size_t source = result.profiles[best].largestDeviation < result.profiles[a].largestDeviation ? best : a;
+            const size_t target = source == a ? best : a;
+            result.profiles[target] = mirroredProfile(result.profiles[source]);
+            pairedLoop[a] = pairedLoop[best] = 1;
+            changed[a] = changed[best] = 1;
+            ++result.symmetricPaired;
+        }
+
+        // 3. Each joint (a segment's start, or a circle's centre) and its exact
+        // mirror, once; joints on the line are their own mirror and get none.
+        struct Joint
+        {
+            size_t profile, segment;
+            int point;
+            Vec2 at;
+        };
+        std::vector<Joint> joints;
+        for (size_t i = 0; i < result.profiles.size(); ++i)
+        {
+            if (!changed[i])
+                continue;
+            for (size_t s = 0; s < result.profiles[i].segments.size(); ++s)
+            {
+                const ProfileSegment& seg = result.profiles[i].segments[s];
+                if (seg.kind == ProfileSegment::Kind::Circle)
+                    joints.push_back({ i, s, 2, seg.centre });
+                else
+                    joints.push_back({ i, s, 0, seg.start });
+            }
+        }
+        const double same = 1e-7 * (1.0 + Length2(origin));
+        std::vector<char> used(joints.size(), 0);
+        for (size_t j = 0; j < joints.size(); ++j)
+        {
+            if (used[j] || std::fabs(side(joints[j].at)) <= same)
+                continue;
+            for (size_t k = j + 1; k < joints.size(); ++k)
+            {
+                if (used[k] || Length2(joints[j].at - mirror(joints[k].at)) > same)
+                    continue;
+                used[j] = used[k] = 1;
+                ProfileConstraint c;
+                c.kind = ProfileConstraint::Kind::Symmetric;
+                c.profile = joints[j].profile;
+                c.segment = joints[j].segment;
+                c.point = joints[j].point;
+                c.otherProfile = joints[k].profile;
+                c.otherSegment = joints[k].segment;
+                c.otherPoint = joints[k].point;
+                constraints.push_back(c);
+                break;
+            }
+        }
+        return constraints;
+    }
+
+    std::vector<ProfileConstraint> ApplyDesignIntent(SectionResult& result, const SectionFrame& frame,
+                                                     double tolerance, const SnapOptions& options)
+    {
+        std::vector<ProfileConstraint> constraints = MakeSymmetric(result, frame, tolerance, options);
+        std::vector<ProfileConstraint> others = FindConstraints(result.profiles, options);
+        constraints.insert(constraints.end(), others.begin(), others.end());
+        result.largestDeviation = 0.0;
+        for (const Profile& p : result.profiles)
+            result.largestDeviation = std::max(result.largestDeviation, p.largestDeviation);
         return constraints;
     }
 
@@ -866,7 +1222,7 @@ namespace scancore
     }
 
     SectionResult SectionMesh(const Mesh& mesh, const SectionFrame& frame, double tolerance,
-                              double referenceTolerance)
+                              double referenceTolerance, bool arcs)
     {
         SectionResult result;
         const Point3 normal = frame.Normal();
@@ -878,7 +1234,7 @@ namespace scancore
             for (const Point3& q : slice.points)
                 flat.push_back(frame.ToPlane(q));
             result.slicePoints += flat.size();
-            result.profiles.push_back(FitProfile(flat, slice.closed, tolerance));
+            result.profiles.push_back(FitProfile(flat, slice.closed, tolerance, arcs));
             result.largestDeviation = std::max(result.largestDeviation, result.profiles.back().largestDeviation);
             result.reference.push_back(SimplifyPolyline(flat, slice.closed, referenceTolerance));
         }

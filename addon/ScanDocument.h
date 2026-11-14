@@ -15,9 +15,11 @@
 #include <string>
 #include <vector>
 
+#include "Compare.h"
 #include "Mesh.h"
 #include "Orient.h"
 #include "Section.h"
+#include "Silhouette.h"
 #include "SurfaceFit.h"
 
 struct ScanDocument
@@ -51,7 +53,10 @@ struct ScanDocument
     // Smooth or Brush (5 Surface): a click selects a smooth area, or the
     // triangles within a radius, to fit a surface to.
     // None, clicks are Alibre's alone.
-    enum class ClickMode { None, Scan, Target, Area, Cylinder, Smooth, Brush, MidPlane };
+    enum class ClickMode { None, Scan, Target, Area, Cylinder, Smooth, Brush, MidPlane, Probe };
+    // Show Scan turned off by the user: the scan isn't drawn anywhere, even by
+    // the scan view while a dialog is open (Frank: Show Scan is the one control).
+    bool scanHidden = false;
     bool orienting = false;
     ClickMode clickMode = ClickMode::None;
     double growAngle = 10.0;                    // degrees
@@ -65,6 +70,15 @@ struct ScanDocument
     // the scan's planes; Target down: Alibre's design plane or flat face.
     struct Section
     {
+        enum class Kind { Slice, Silhouette };
+        Kind kind = Kind::Slice;
+        double smallestHole = 1.0;              // mm across; silhouette holes and pieces smaller are left out
+        // Sketch Options (Frank's, all on by default): the raw slice, the fitted
+        // lines and arcs (the raw slice then as construction lines), and whether
+        // arcs are fitted (snap.fitArcs) or lines only.
+        bool createRaw = true;
+        bool createFitted = true;
+        scancore::SilhouetteInfo silhouetteInfo;
         bool havePlane = false;
         std::string planeName;                  // UTF-8
         scancore::Point3 point, normal;         // the chosen plane in mm, before the offset
@@ -76,12 +90,32 @@ struct ScanDocument
         scancore::SectionFrame frame;           // a guess at the sketch's axes, for the preview
         scancore::SectionResult result;
         std::vector<scancore::ProfileConstraint> constraints;
+        std::string symmetryName;               // UTF-8: the plane Symmetric uses, empty when none
         int sketches = 0;                       // made so far, for names
     };
+    // World planes 5 Surface's Detect found the scan symmetric about: XY, YZ, ZX.
+    bool detectedSymmetry[3] = { false, false, false };
+
     bool sectioning = false;
     Section section;
-    // Slices and fits again (after the plane, offset, tolerance or scan changes).
+    // 6 Silhouette: Section's dialog and drawing on a second Section of its own,
+    // with its own plane and settings. Only one of the two is open at a time.
+    bool silhouetting = false;
+    Section silhouette = [] {
+        Section s;
+        s.kind = Section::Kind::Silhouette;
+        return s;
+    }();
+    // The open one of the two, or nullptr.
+    Section* ActiveSection() { return silhouetting ? &silhouette : (sectioning ? &section : nullptr); }
+    bool Sectioning() const { return sectioning || silhouetting; }
+    // Slices (or outlines) and fits the open one again (after the plane,
+    // offset, tolerance or scan changes).
     void UpdateSection();
+    // Sets section's symmetry line in frame: where the first symmetry plane
+    // square to the frame meets it (fitted planes named "Symmetry plane" or
+    // "Mid plane", then world planes Detect found), or none.
+    void SetSymmetryLine(Section& section, const scancore::SectionFrame& frame) const;
 
     // Surface (5 Surface): while its dialog is open, clicks in Smooth or Brush
     // mode add to the selection (or take an area away), and the view draws the
@@ -98,6 +132,31 @@ struct ScanDocument
     Surface surface;
     // Fits again (after the selection, an option or the scan changes).
     void UpdateSurface();
+
+    // Compare (7 Compare): while its dialog is open the scan is drawn in colour
+    // bands by its distance from the part as built so far (read when the dialog
+    // opens). Probe down: a click on the scan reads the distance there.
+    struct Compare
+    {
+        double tolerance = 0.1;                 // mm: green either way
+        double range = 1.0;                     // mm: beyond it, grey
+        bool havePart = false;
+        scancore::Mesh part;                    // the part's facets, mm
+        double searched = 0.0;                  // the range the values were found within; 0 when there are none
+        std::vector<float> meshValues;          // per vertex of mesh: statistics and the probe
+        std::vector<float> displayValues;       // per vertex of display: the colours
+        scancore::DeviationStats stats;
+        bool haveProbe = false;
+        scancore::Point3 probe;
+        double probeValue = 0.0;                // NaN: not modelled there
+    };
+    bool comparing = false;
+    Compare compare;
+    // Every vertex's distance from the part, found again (when the part is read,
+    // or the range grows past what was searched).
+    void UpdateCompare();
+    // The statistics and colours again, after the tolerance or range changes.
+    void RebandCompare();
 
     // The box's centre planes, axes and centre, then the fitted planes and axes.
     std::vector<scancore::Feature> Features() const;
@@ -124,6 +183,10 @@ struct ScanDocument
 
     const DrawArrays* Arrays();
     const DrawArrays* SelectionArrays();         // nullptr when nothing's selected
+    // Compare: one band's triangles (a triangle's band from the mean of its
+    // corners), at the drawn level of detail; nullptr when it has none or
+    // nothing's compared.
+    const DrawArrays* BandArrays(int band);
 
     // Each triangle's neighbours, for growing a flat area (made when first asked).
     const std::vector<std::array<int, 3>>& Neighbours();
@@ -152,10 +215,22 @@ private:
     void Remember();
     void DrawingChanged(bool trianglesChanged);
 
+    void ResetBands();
+
     std::vector<Snapshot> m_undo;               // oldest first
+    std::unique_ptr<DrawArrays> m_bandArrays[scancore::kDeviationBands];
+    bool m_bandsMade = false;
+    bool m_bandsFull = false;                   // made from the full mesh rather than the simplified one
     std::vector<std::array<int, 3>> m_neighbours;
     double m_millimetresPerUnit = 10.0;
 };
+
+// A section's slice (4 Section) or outline (6 Silhouette) in the frame, by its kind.
+scancore::SectionResult SectionOf(const scancore::Mesh& mesh, ScanDocument::Section& section,
+                                  const scancore::SectionFrame& frame);
+
+// A colour band's colour (0 to 255 each), shared by the view and Compare's legend.
+void DeviationColour(int band, long rgb[3]);
 
 // Makes a document from a mesh: its box, fitted box and the simplified copy for drawing.
 std::unique_ptr<ScanDocument> MakeScanDocument(scancore::Mesh&& mesh, const std::string& sourceName);

@@ -74,6 +74,7 @@
     <ClCompile Include="Section.cpp" />
     <ClCompile Include="ScanData.cpp" />
     <ClCompile Include="ScanFile.cpp" />
+    <ClCompile Include="Silhouette.cpp" />
     <ClCompile Include="Smooth.cpp" />
     <ClCompile Include="Symmetry.cpp" />
     <ClCompile Include="SurfaceFit.cpp" />
@@ -93,6 +94,7 @@
     <ClInclude Include="Section.h" />
     <ClInclude Include="ScanData.h" />
     <ClInclude Include="ScanFile.h" />
+    <ClInclude Include="Silhouette.h" />
     <ClInclude Include="Smooth.h" />
     <ClInclude Include="Symmetry.h" />
     <ClInclude Include="SurfaceFit.h" />

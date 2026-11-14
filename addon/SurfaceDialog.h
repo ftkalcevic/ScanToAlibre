@@ -29,6 +29,7 @@ protected:
     afx_msg void OnSelectChanged();
     afx_msg void OnOptionsChanged();
     afx_msg void OnCreate();
+    afx_msg void OnDetect();
 
     DECLARE_MESSAGE_MAP()
 
