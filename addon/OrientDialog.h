@@ -20,6 +20,8 @@ public:
 
     // Shows what the view changed: the chosen geometry, the target, the selection.
     void UpdateFromScan();
+    // With Mid Plane down, the scan view chose the second feature: make the plane.
+    void MidPlanePicked();
 
 protected:
     BOOL OnInitDialog() override;
@@ -37,6 +39,10 @@ protected:
     afx_msg void OnFitPlane();
     afx_msg void OnFitAxis();
     afx_msg void OnSelectCylinder();
+    afx_msg void OnDelete();
+    afx_msg void OnDeleteAll();
+    afx_msg void OnFindSymmetry();
+    afx_msg void OnMidPlane();
     afx_msg void OnAlign();
     afx_msg void OnStartOver();
     afx_msg void OnUndo();
@@ -49,12 +55,17 @@ private:
     // Moves the scan, starting the alignment over (it no longer holds).
     void MoveScan(const scancore::Transform& transform, const CString& status);
     void ScanChanged();
+    // The chosen feature's index in ScanDocument::fitted, or -1 when nothing is
+    // chosen or it's one of the box's.
+    int ChosenFitted() const;
     // Pushes the button for mode down and the others up; pushing the one that's
     // down puts all of them up.
     void ToggleClickMode(int mode);
     void ShowClickMode();
     // Adds a fitted plane or axis, chooses it to align, and puts the buttons up.
     void AddFitted(const scancore::Feature& feature, const CString& status);
+
+    int m_midFirst = -1;                // with Mid Plane down: the first feature, in Features()
 
     CComboBox m_rotateAxis;
     CComboBox m_rotatePivot;
@@ -64,3 +75,5 @@ private:
 
 // Called by the scan view when what Orient shows has changed.
 void OrientViewChanged();
+// Called by the scan view when Mid Plane's second feature has been clicked.
+void OrientMidPlanePicked();

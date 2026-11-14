@@ -51,7 +51,7 @@ struct ScanDocument
     // Smooth or Brush (5 Surface): a click selects a smooth area, or the
     // triangles within a radius, to fit a surface to.
     // None, clicks are Alibre's alone.
-    enum class ClickMode { None, Scan, Target, Area, Cylinder, Smooth, Brush };
+    enum class ClickMode { None, Scan, Target, Area, Cylinder, Smooth, Brush, MidPlane };
     bool orienting = false;
     ClickMode clickMode = ClickMode::None;
     double growAngle = 10.0;                    // degrees
@@ -134,6 +134,9 @@ struct ScanDocument
     void ReplaceMesh(scancore::Mesh&& mesh);                     // Refine: the box is fitted again
     void Move(const scancore::Transform& transform, const scancore::AlignState& align);
     void AddFitted(const scancore::Feature& feature);
+    // Removes fitted[index] (not the box's own planes, axes and centre).
+    void DeleteFitted(size_t index);
+    void DeleteAllFitted();                                       // every fitted plane and axis
     bool CanUndo() const { return !m_undo.empty(); }
     void Undo();
 

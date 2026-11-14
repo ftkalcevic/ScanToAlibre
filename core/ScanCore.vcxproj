@@ -63,6 +63,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="BSplineSurface.cpp" />
+    <ClCompile Include="Compare.cpp" />
     <ClCompile Include="Decimate.cpp" />
     <ClCompile Include="FileIO.cpp" />
     <ClCompile Include="Iges.cpp" />
@@ -74,11 +75,13 @@
     <ClCompile Include="ScanData.cpp" />
     <ClCompile Include="ScanFile.cpp" />
     <ClCompile Include="Smooth.cpp" />
+    <ClCompile Include="Symmetry.cpp" />
     <ClCompile Include="SurfaceFit.cpp" />
     <ClCompile Include="ViewProjection.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="BSplineSurface.h" />
+    <ClInclude Include="Compare.h" />
     <ClInclude Include="Decimate.h" />
     <ClInclude Include="FileIO.h" />
     <ClInclude Include="Geometry.h" />
@@ -91,6 +94,7 @@
     <ClInclude Include="ScanData.h" />
     <ClInclude Include="ScanFile.h" />
     <ClInclude Include="Smooth.h" />
+    <ClInclude Include="Symmetry.h" />
     <ClInclude Include="SurfaceFit.h" />
     <ClInclude Include="ViewProjection.h" />
   </ItemGroup>

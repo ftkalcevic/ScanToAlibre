@@ -9,8 +9,11 @@
 #include "Log.h"
 
 #include "Orient.h"
+#include "Symmetry.h"
 
+#include <chrono>
 #include <cmath>
+#include <cstdlib>
 #include <cwchar>
 
 #ifdef _DEBUG
@@ -60,12 +63,29 @@ namespace
                     state.step + 1, static_cast<LPCWSTR>(Wide(scancore::FreedomText(state))));
         return text;
     }
+
+    // The number after the last fitted feature named "<prefix>n", plus one, so a
+    // name isn't used twice after one is deleted.
+    int NextNumber(const std::vector<Feature>& fitted, const std::string& prefix)
+    {
+        int highest = 0;
+        for (const Feature& f : fitted)
+            if (f.name.compare(0, prefix.size(), prefix) == 0)
+                highest = (std::max)(highest, std::atoi(f.name.c_str() + prefix.size()));
+        return highest + 1;
+    }
 }
 
 void OrientViewChanged()
 {
     if (COrientDlg* pDialog = dynamic_cast<COrientDlg*>(OpenStepDialog()))
         pDialog->UpdateFromScan();
+}
+
+void OrientMidPlanePicked()
+{
+    if (COrientDlg* pDialog = dynamic_cast<COrientDlg*>(OpenStepDialog()))
+        pDialog->MidPlanePicked();
 }
 
 BEGIN_MESSAGE_MAP(COrientDlg, CStepDialog)
@@ -83,6 +103,10 @@ BEGIN_MESSAGE_MAP(COrientDlg, CStepDialog)
     ON_BN_CLICKED(IDC_OR_FIT, &COrientDlg::OnFitPlane)
     ON_BN_CLICKED(IDC_OR_FIT_AXIS, &COrientDlg::OnFitAxis)
     ON_BN_CLICKED(IDC_OR_SELECT_CYLINDER, &COrientDlg::OnSelectCylinder)
+    ON_BN_CLICKED(IDC_OR_DELETE, &COrientDlg::OnDelete)
+    ON_BN_CLICKED(IDC_OR_DELETE_ALL, &COrientDlg::OnDeleteAll)
+    ON_BN_CLICKED(IDC_OR_FIND_SYMMETRY, &COrientDlg::OnFindSymmetry)
+    ON_BN_CLICKED(IDC_OR_MID_PLANE, &COrientDlg::OnMidPlane)
     ON_BN_CLICKED(IDC_OR_ALIGN, &COrientDlg::OnAlign)
     ON_BN_CLICKED(IDC_OR_START_OVER, &COrientDlg::OnStartOver)
     ON_BN_CLICKED(IDC_OR_UNDO, &COrientDlg::OnUndo)
@@ -181,12 +205,15 @@ void COrientDlg::UpdateFromScan()
     SetDlgItemText(IDC_OR_STEP, StepText(align));
 
     const bool has = pScan != nullptr;
-    for (int id : { IDC_OR_MOVE, IDC_OR_CENTRE, IDC_OR_ROTATE, IDC_OR_SCALE_APPLY, IDC_OR_START_OVER })
+    for (int id : { IDC_OR_MOVE, IDC_OR_CENTRE, IDC_OR_ROTATE, IDC_OR_SCALE_APPLY, IDC_OR_START_OVER,
+                    IDC_OR_FIND_SYMMETRY, IDC_OR_MID_PLANE })
         GetDlgItem(id)->EnableWindow(has);
     GetDlgItem(IDC_OR_FIT)->EnableWindow(has && !pScan->selection.empty());
     GetDlgItem(IDC_OR_FIT_AXIS)->EnableWindow(has && !pScan->selection.empty());
     GetDlgItem(IDC_OR_CLEAR)->EnableWindow(has && !pScan->selection.empty());
     GetDlgItem(IDC_OR_ALIGN)->EnableWindow(has && pScan->chosen >= 0 && pScan->haveTarget && !pScan->align.Done());
+    GetDlgItem(IDC_OR_DELETE)->EnableWindow(ChosenFitted() >= 0);
+    GetDlgItem(IDC_OR_DELETE_ALL)->EnableWindow(has && !pScan->fitted.empty());
     GetDlgItem(IDC_OR_UNDO)->EnableWindow(has && pScan->CanUndo());
 }
 
@@ -345,6 +372,9 @@ void COrientDlg::ToggleClickMode(int mode)
         SetStatus(L"Click a cylinder of the scan, outside or a hole, to select it; click a selected one to take it "
                   L"away.");
         break;
+    case Mode::MidPlane:
+        SetStatus(L"Click the second plane, axis or point: the plane goes halfway between it and the first.");
+        break;
     default:
         SetStatus(L"Clicks in the view are Alibre's.");
         break;
@@ -359,6 +389,7 @@ void COrientDlg::ShowClickMode()
     CheckDlgButton(IDC_OR_PICK_TARGET, mode == ScanDocument::ClickMode::Target ? BST_CHECKED : BST_UNCHECKED);
     CheckDlgButton(IDC_OR_SELECT_AREA, mode == ScanDocument::ClickMode::Area ? BST_CHECKED : BST_UNCHECKED);
     CheckDlgButton(IDC_OR_SELECT_CYLINDER, mode == ScanDocument::ClickMode::Cylinder ? BST_CHECKED : BST_UNCHECKED);
+    CheckDlgButton(IDC_OR_MID_PLANE, mode == ScanDocument::ClickMode::MidPlane ? BST_CHECKED : BST_UNCHECKED);
 }
 
 void COrientDlg::OnGrowChanged()
@@ -407,10 +438,7 @@ void COrientDlg::OnFitPlane()
         SetStatus(L"A plane couldn't be fitted to that selection.");
         return;
     }
-    int planes = 0;
-    for (const Feature& f : pScan->fitted)
-        planes += (f.kind == Feature::Kind::Plane) ? 1 : 0;
-    plane.name = "Plane " + std::to_string(planes + 1);
+    plane.name = "Plane " + std::to_string(NextNumber(pScan->fitted, "Plane "));
     const size_t triangles = pScan->selection.size();
     Log(L"[orient] %S fitted to %zu triangles: point (%.3f, %.3f, %.3f), normal (%.4f, %.4f, %.4f), rms %.4f mm",
         plane.name.c_str(), triangles, plane.point.x, plane.point.y, plane.point.z, plane.direction.x,
@@ -436,11 +464,8 @@ void COrientDlg::OnFitAxis()
         MessageBeep(MB_ICONWARNING);
         return;
     }
-    int axes = 0;
-    for (const Feature& f : pScan->fitted)
-        axes += (f.kind == Feature::Kind::Axis) ? 1 : 0;
     char name[96];
-    sprintf_s(name, "Axis %d (diameter %.3f, %s)", axes + 1, 2.0 * fit.radius, fit.hole ? "hole" : "outside");
+    sprintf_s(name, "Axis %d (diameter %.3f, %s)", NextNumber(pScan->fitted, "Axis "), 2.0 * fit.radius, fit.hole ? "hole" : "outside");
     fit.axis.name = name;
     const size_t triangles = pScan->selection.size();
     Log(L"[orient] %S fitted to %zu triangles: point (%.3f, %.3f, %.3f), direction (%.4f, %.4f, %.4f), radius %.4f, "
@@ -508,6 +533,186 @@ void COrientDlg::OnAlign()
     CheckDlgButton(IDC_OR_FLIP, BST_UNCHECKED);
     ScanChanged();
     SetStatus(status);
+}
+
+int COrientDlg::ChosenFitted() const
+{
+    const ScanDocument* pScan = FindScan(m_sessionId);
+    if (pScan == nullptr || pScan->chosen < 0)
+        return -1;
+    const int index = pScan->chosen - static_cast<int>(scancore::BoxFeatures(pScan->box).size());
+    return (index >= 0 && index < static_cast<int>(pScan->fitted.size())) ? index : -1;
+}
+
+void COrientDlg::OnDelete()
+{
+    AFX_MANAGE_STATE(AfxGetStaticModuleState());
+    ScanDocument* pScan = FindScan(m_sessionId);
+    const int index = ChosenFitted();
+    if (pScan == nullptr || index < 0)
+        return;
+    const std::string name = pScan->fitted[index].name;
+    pScan->DeleteFitted(static_cast<size_t>(index));
+    MarkPartChanged(m_sessionId, L"Plane or axis deleted. Changed by ScanToAlibre so the part saves it.");
+    Log(L"[orient] deleted %S", name.c_str());
+    RefreshScanViews();
+    UpdateFromScan();
+    CString status;
+    status.Format(L"%s deleted. Undo brings it back.", static_cast<LPCWSTR>(Wide(name)));
+    SetStatus(status);
+}
+
+void COrientDlg::OnDeleteAll()
+{
+    AFX_MANAGE_STATE(AfxGetStaticModuleState());
+    ScanDocument* pScan = FindScan(m_sessionId);
+    if (pScan == nullptr || pScan->fitted.empty())
+        return;
+    const size_t count = pScan->fitted.size();
+    CString question;
+    question.Format(L"You are about to remove all %zu fitted planes and axes (symmetry and mid planes too). The "
+                    L"box's own planes, axes and centre stay.\n\nDelete them all?",
+                    count);
+    if (::MessageBoxW(GetSafeHwnd(), question, L"Delete All", MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2) != IDYES)
+        return;
+    pScan->DeleteAllFitted();
+    MarkPartChanged(m_sessionId, L"Planes and axes deleted. Changed by ScanToAlibre so the part saves it.");
+    Log(L"[orient] deleted all %zu fitted planes and axes", count);
+    m_midFirst = -1;
+    if (pScan->clickMode == ScanDocument::ClickMode::MidPlane)
+    {
+        pScan->clickMode = ScanDocument::ClickMode::None;
+        ShowClickMode();
+    }
+    RefreshScanViews();
+    UpdateFromScan();
+    CString status;
+    status.Format(L"Deleted every fitted plane and axis (%zu). Undo brings them back.", count);
+    SetStatus(status);
+}
+
+void COrientDlg::OnFindSymmetry()
+{
+    AFX_MANAGE_STATE(AfxGetStaticModuleState());
+    ScanDocument* pScan = FindScan(m_sessionId);
+    if (pScan == nullptr)
+        return;
+    SetStatus(L"Finding the scan's symmetry...");
+    CWaitCursor wait;
+    const auto start = std::chrono::steady_clock::now();
+    scancore::SymmetryOptions options;
+    const std::vector<scancore::SymmetryCandidate> found =
+        scancore::FindSymmetryPlanes(pScan->mesh, pScan->box, pScan->fitted, options);
+    const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+    for (const scancore::SymmetryCandidate& c : found)
+        Log(L"[orient] symmetry candidate: normal (%.5f, %.5f, %.5f), point (%.3f, %.3f, %.3f); %.1f%% within "
+            L"%.2f mm, %.1f%% matched, rms %.4f mm, trimmed rms %.4f mm",
+            c.plane.direction.x, c.plane.direction.y, c.plane.direction.z, c.plane.point.x, c.plane.point.y,
+            c.plane.point.z, 100.0 * c.score.within, options.tolerance, 100.0 * c.score.matched, c.score.rms,
+            c.score.trimmed);
+    Log(L"[orient] find symmetry: %zu candidates in %.2f s", found.size(), seconds);
+
+    // The best not already fitted, so pushing again gives the next.
+    const double sameAngle = std::cos(0.1 * kPi / 180.0);
+    const scancore::SymmetryCandidate* pBest = nullptr;
+    for (const scancore::SymmetryCandidate& c : found)
+    {
+        bool fitted = false;
+        for (const Feature& f : pScan->fitted)
+            fitted = fitted || (f.kind == Feature::Kind::Plane &&
+                                std::fabs(scancore::Dot(f.direction, c.plane.direction)) >= sameAngle &&
+                                std::fabs(scancore::Dot(f.point - c.plane.point, c.plane.direction)) <= 0.1);
+        if (!fitted)
+        {
+            pBest = &c;
+            break;
+        }
+    }
+    const double least = 0.3;
+    if (pBest == nullptr || pBest->score.within < least)
+    {
+        CString status;
+        if (pBest == nullptr && !found.empty())
+            status = L"No other symmetry found: the planes found are already fitted.";
+        else if (pBest == nullptr)
+            status = L"No symmetry found.";
+        else
+            status.Format(L"No symmetry found: the best plane had only %.0f%% of the scan within %.1f mm of its "
+                          L"mirror image.",
+                          100.0 * pBest->score.within, options.tolerance);
+        SetStatus(status);
+        MessageBeep(MB_ICONWARNING);
+        return;
+    }
+    Feature plane = pBest->plane;
+    plane.name = "Symmetry plane " + std::to_string(NextNumber(pScan->fitted, "Symmetry plane "));
+    Log(L"[orient] %S: normal (%.5f, %.5f, %.5f), point (%.3f, %.3f, %.3f)", plane.name.c_str(), plane.direction.x,
+        plane.direction.y, plane.direction.z, plane.point.x, plane.point.y, plane.point.z);
+    CString status;
+    status.Format(L"%s: %.1f%% of the scan is within %.1f mm of its mirror image (rms %.3f mm, %.1f%% matched). "
+                  L"It's chosen to align. Find Symmetry again finds the next best.",
+                  static_cast<LPCWSTR>(Wide(plane.name)), 100.0 * pBest->score.within, options.tolerance,
+                  pBest->score.rms, 100.0 * pBest->score.matched);
+    AddFitted(plane, status);
+}
+
+void COrientDlg::OnMidPlane()
+{
+    ScanDocument* pScan = FindScan(m_sessionId);
+    if (pScan == nullptr)
+        return;
+    if (pScan->clickMode == ScanDocument::ClickMode::MidPlane)
+    {
+        ToggleClickMode(static_cast<int>(ScanDocument::ClickMode::MidPlane));
+        return;
+    }
+    if (pScan->chosen < 0)
+    {
+        ShowClickMode();
+        SetStatus(L"First push Scan and click the first plane, axis or point, then push Mid Plane and click the "
+                  L"second.");
+        MessageBeep(MB_ICONWARNING);
+        return;
+    }
+    m_midFirst = pScan->chosen;
+    ToggleClickMode(static_cast<int>(ScanDocument::ClickMode::MidPlane));
+}
+
+void COrientDlg::MidPlanePicked()
+{
+    AFX_MANAGE_STATE(AfxGetStaticModuleState());
+    ScanDocument* pScan = FindScan(m_sessionId);
+    if (pScan == nullptr || pScan->clickMode != ScanDocument::ClickMode::MidPlane)
+        return;
+    const std::vector<Feature> features = pScan->Features();
+    const int count = static_cast<int>(features.size());
+    if (m_midFirst < 0 || m_midFirst >= count || pScan->chosen < 0 || pScan->chosen >= count)
+        return;
+    const Feature& a = features[m_midFirst];
+    const Feature& b = features[pScan->chosen];
+    Feature plane;
+    std::string message;
+    const bool same = m_midFirst == pScan->chosen;
+    if (same || !scancore::MidPlane(a, b, plane, message))
+    {
+        pScan->chosen = m_midFirst;     // the first stays chosen; click another
+        SetStatus(same ? CString(L"That's the first one. Click a second plane, axis or point.") : Wide(message));
+        MessageBeep(MB_ICONWARNING);
+        UpdateFromScan();
+        RefreshScanViews();
+        return;
+    }
+    if (a.kind == Feature::Kind::Point)
+        plane.halfWidth = (std::max)({ pScan->box.halfSize[0], pScan->box.halfSize[1], pScan->box.halfSize[2] });
+    plane.name = "Mid plane " + std::to_string(NextNumber(pScan->fitted, "Mid plane "));
+    Log(L"[orient] %S between %S and %S: normal (%.5f, %.5f, %.5f), point (%.3f, %.3f, %.3f)", plane.name.c_str(),
+        a.name.c_str(), b.name.c_str(), plane.direction.x, plane.direction.y, plane.direction.z, plane.point.x,
+        plane.point.y, plane.point.z);
+    CString status;
+    status.Format(L"%s, halfway between %s and %s. It's chosen to align.", static_cast<LPCWSTR>(Wide(plane.name)),
+                  static_cast<LPCWSTR>(Wide(a.name)), static_cast<LPCWSTR>(Wide(b.name)));
+    m_midFirst = -1;
+    AddFitted(plane, status);
 }
 
 void COrientDlg::OnStartOver()

@@ -2727,3 +2727,218 @@ Decisions are also recorded in the spec (`docs\SPEC.md`) and `CLAUDE.md`.
 >    5. Read `[compare] part facets` in the log.
 
 *(Frank approved the plan.)*
+
+### 🤖 Claude
+
+> I've saved the plan for later. It's now in the repository at [docs/PLAN-next.md](../ScanToAlibre/docs/PLAN-next.md), headed "approved, not started", and the first item in [TODO.md](../ScanToAlibre/TODO.md) points to it. When we come back to it, the order is:
+>
+> 1. Deleting fitted planes and axes
+> 2. Find Symmetry and Mid Plane
+> 3. 6 Silhouette
+> 4. 7 Compare
+> 5. Detect in 5 Surface and the Symmetric design intent in Section
+>
+> No code is written yet, and nothing is committed. I've also rebuilt both Discussion.md files.
+
+### 🧑 Frank · 14:42
+
+> Later
+
+### 🤖 Claude
+
+> Okay, I'll leave the plan for later. It's saved in `docs\PLAN-next.md`, and the first item in `TODO.md` points to it.
+
+### 🧑 Frank · 14:43
+
+> Lets start with the delete item from the plan
+
+### 🤖 Claude
+
+> The plan is ScanToAlibre's (Orient's Delete button comes first). I'll work in `D:\Projects\alibre\ScanToAlibre`.
+
+> Found it: the plan is ScanToAlibre's, and Delete in 3 Orient comes first. Adding a Delete button to the Align group, a `DeleteFitted` in `ScanDocument`, then building.
+
+> Now the edits: document, resource, template, dialog.
+
+> Now the dialog handler, enabling, and names that don't repeat after a delete.
+
+> Built clean, 74 tests pass. Now the docs (no help page exists in ScanToAlibre).
+
+> Text is right. Now install (it needs Alibre closed and UAC).
+
+> The UAC prompt was cancelled, so it isn't installed. Correcting CLAUDE.md, then rebuilding the discussion.
+
+> I've added Delete to ScanToAlibre's 3 Orient, the first item in `docs\PLAN-next.md`. The Release build is clean and the 74 core tests pass. It isn't installed yet because the UAC prompt was cancelled, so nothing has been tried in Alibre.
+>
+> **What it does**
+> - **The button:** a Delete button now sits beside the Scan feature in the Align group. It deletes the fitted plane or axis you've chosen. It's greyed when nothing is chosen, or when the choice is one of the box's planes, its axes or its centre.
+> - **Undo:** brings a deleted plane or axis back.
+> - **Saving:** a deletion counts as an unsaved change, Alibre is told the part changed, and the log gets `[orient] deleted <name>`.
+> - **Scan button:** Delete leaves the Scan button as it was, so if it's down you can click the next one straight away.
+> - **Alignment:** a step that already used the deleted plane or axis stays aligned, because the step moved the scan.
+> - **One fix I added:** new planes and axes used to be numbered by counting, so deleting Plane 1 and fitting again would give a second "Plane 2". They're now numbered one past the highest left.
+>
+> The changes are in [OrientDialog.cpp](../ScanToAlibre/addon/OrientDialog.cpp), `ScanDocument::DeleteFitted` in [ScanDocument.cpp](../ScanToAlibre/addon/ScanDocument.cpp), and the resource and template (`IDC_OR_DELETE`, 13115). I also updated the spec, `CLAUDE.md` and `TODO.md`. ScanToAlibre has no help page, so there was none to change.
+>
+> **To install:** close Alibre, run this and accept the UAC prompt:
+>
+> ```bash
+> powershell -ExecutionPolicy Bypass -File D:\Projects\alibre\ScanToAlibre\deploy\install.ps1
+> ```
+>
+> **To test in Alibre**
+> 1. In Orient, fit a plane, push Scan, click the plane and click Delete. It should disappear, and the status line should name it.
+> 2. Click Undo. The plane should come back.
+> 3. Choose one of the box's planes or its centre. Delete should be greyed.
+> 4. Fit Plane 1 and Plane 2, delete Plane 1, then fit another plane. It should be called Plane 3.
+> 5. Delete a plane, save, and reopen the part. It should stay gone.
+> 6. Check the log for the `[orient] deleted` line.
+
+### 🧑 Frank · 14:50
+
+> Yes, continue
+
+### 🤖 Claude
+
+> Now writing the core: a nearest-point grid in `core\Compare` (shared with 7 Compare later) and `core\Symmetry`.
+
+> Let me simplify the tie handling in `visit` before going on.
+
+> Now `core\Symmetry`.
+
+> Now tests.
+
+> Adding the files to the projects and building.
+
+> All 7 pass: the tilted plane is found exactly (rms 6e-12 mm), and the blob's best is 15%, so it's refused. Let me time it on a real scan.
+
+> The box is fine, so a NaN must come from degenerate triangles in the scan going into the closest-point formula. I'll guard both places.
+
+> Now ranking by a trimmed rms (each point's distance capped at the tolerance, unmatched counted at the tolerance) so a tight fit wins over a loose one with a few more points inside 0.2 mm.
+
+> mt12cover now works (a plane with rms 0.049 mm, 99% within) but took 11.7 s: the grid cell was too coarse for 1 million small triangles. I'll size the cell from the triangle density.
+
+> Still 7 s. Let me see whether the refinement runs all 30 iterations.
+
+> About 0.3 s an iteration, and it uses all 30. Let me see how the steps shrink.
+
+> The template didn't change. Let me see why.
+
+> `SS_ENDELLIPSIS` matched my search for `END`. I'll redo it with the whole line.
+
+> Template done. Now the dialog code and the view's click.
+
+### 🧑 Frank · 15:02
+
+> <local-command-stdout>Compacted </local-command-stdout>
+
+### 🤖 Claude
+
+> The shell tripped on the heredoc. I'll put the script in a file instead.
+
+> Clean build, 80 tests pass. Now docs and the install attempt.
+
+> The UAC prompt was cancelled again, so it's still not installed. Rebuilding the discussion files.
+
+> Find Symmetry and Mid Plane are added to ScanToAlibre's 3 Orient, next to Delete from before. The Release build is clean and all 80 core tests pass. None of it is installed, because the UAC prompt was cancelled again, so nothing has been tested in Alibre.
+>
+> **Find Symmetry**
+> - **Search:** it tries the box's centre planes, the scan's main directions, and planes taken from your fitted planes and axes. Each is scored by mirroring 20,000 points spread over the scan and measuring how far each lands from the scan. The best four are then moved step by step until they settle (the plan's mirror ICP).
+> - **Change from the plan:** planes are ranked on how tightly the scan matches its mirror image, not on the share of points within 0.2 mm as the plan said. On `Popsicle_dispenser.stl`, the old ranking put a plane 2° off first, because mirroring flat faces still lands near them. Now the true plane comes first: points about 0.002 mm from their mirror images on average (rms), found in 0.5 s. I've recorded this in the spec.
+> - **Repeat:** pushing Find Symmetry again adds the next best plane that isn't already fitted. This was my choice; it isn't in the plan.
+> - **Refusal:** it refuses with "No symmetry found" when under 30% of the scan is within 0.2 mm of its mirror image.
+> - **Real scans:**
+>   - On `mt12cover.ply` (1.07 million triangles) it takes 3.7 s, with 99.2% of the scan within 0.2 mm and an rms of 0.048 mm.
+>   - That scan first gave meaningless results because some of its triangles have no area. It's guarded now.
+> - **Timing:** it was 11.7 s on `mt12cover.ply` at first. Two changes brought it down: the search grid is now sized to the triangles, and only the best starting plane is refined all the way.
+>
+> **Mid Plane**
+> - **How to use it:** push Scan and click a plane, axis or point, then push Mid Plane and click a second of the same kind.
+> - **Two planes:** the plane goes halfway between them, or bisects them if they're at an angle.
+> - **Two axes or two points:** the plane is square to the line joining them, through its middle.
+> - **Mixed kinds:** refused, with a message.
+>
+> The Fit group has a new Symmetry row, so the dialog is 18 units taller. The distance search is in `core\Compare`, ready for 7 Compare. I've updated the spec, `CLAUDE.md` and `TODO.md`.
+>
+> **To install:** close Alibre, run this and accept the UAC prompt:
+>
+> ```bash
+> powershell -ExecutionPolicy Bypass -File D:\Projects\alibre\ScanToAlibre\deploy\install.ps1
+> ```
+>
+> **To test in Alibre**
+> 1. In Orient, check the new Symmetry row and that the controls below it aren't overlapping.
+> 2. Click Find Symmetry on a symmetric part. You should get "Symmetry plane 1" chosen, with its score on the status line.
+> 3. Click Find Symmetry again for the next plane, or "No other symmetry found".
+> 4. Push To, click Alibre's YZ plane, and Align the symmetry plane onto it.
+> 5. Fit the part's two side faces, choose one with Scan, push Mid Plane and click the other. The new plane should sit halfway between them.
+> 6. Try Mid Plane with a plane and an axis. It should be refused with a message.
+> 7. Delete a symmetry plane and Undo it.
+> 8. Check the log for the `[orient] symmetry candidate` and `find symmetry` lines, including how long it took.
+
+### 🧑 Frank · 15:13
+
+> Add Lathe support.  in the machine setup, add machine type - mill, lathe.  Stock options will be Rod Stock, Part Rod Stock and Import Stock.  A rod is a cylinder, providing similar options to the box.
+> Lathe will have just one Add... submenu, with face, turn rough, turn finish, face, groove, threading, parting.
+
+### 🤖 Claude
+
+> Questions:
+> - Lathe support is big. How much should this first change cover?
+>   - Framework first (Recommended): Machine type, Rod/Part Rod/Import stock, the lathe Add menu, lathe tool types, and each operation with its dialog tabs and settings saved. Toolpaths, simulation and the lathe post come one operation at a time afterwards, as Drill/Facing did.
+>   - Framework + Face and Turn: As above, plus working toolpaths for Facing and Turn Rough/Finish, drawn in the view and posted, before stopping.
+>   - Everything: All seven operations with toolpaths, simulation and a LinuxCNC lathe post in one go.
+> - The lathe Add list has "face" twice (face, turn rough, turn finish, face, groove, threading, parting). What was the second one meant to be?
+>   - Drill (centre): Drilling on the spindle axis with a drill in the tailstock/turret.
+>   - Bore: Internal turning with a boring bar.
+>   - Chamfer: A chamfer on an edge of the turned profile.
+>   - Just a typo: Only one Face; six operations.
+> - How is the lathe's spindle axis set, which the rod and every lathe toolpath follow?
+>   - From Set Origin (Recommended): Set Origin's Z is the spindle axis (picked from a cylindrical face, round edge or design axis, as today), its position the work zero (usually the part's face). Rod stock lies along that axis; its X is the radial direction. Toolpaths are the profile in the origin's XZ plane.
+>   - Assembly axis in the stock: The rod's dialog picks assembly X, Y or Z as the spindle axis; Set Origin only sets the zero along it.
+> - Lathe tools are a different shape from mills. Which tool types should a lathe machine have?
+>   - Turning insert: Insert shape/angle, nose radius, approach (lead) angle, holder hand (left/right/neutral). Used by Face and Turn.
+>   - Grooving / parting: Blade width, corner radius, max depth. Used by Groove and Parting.
+>   - Threading: Thread angle (60/55/29), tip width or radius, internal/external.
+>   - Boring bar: Insert as turning plus min bore diameter and reach. Only needed if Bore is wanted.
+
+### 🧑 Frank · 15:18
+
+> That tested fine.  Before we continue to 6, add a 
+> "delete all" button to remove all scan geometry
+
+### 🤖 Claude
+
+> Tidying the status wording, then building.
+
+> Builds clean. Now the docs, marking Frank's test of Find Symmetry and Mid Plane, then install.
+
+> Frank's test covered the install, so the Delete line is out of date too.
+
+> Installed. Updating the install note and rebuilding the discussion files.
+
+> I've added a Delete All button to Orient, next to Delete. It removes every fitted plane and axis in one go, symmetry and mid planes included. The box's own planes, axes and centre stay. It's built and installed (the UAC prompt went through this time), and the 80 core tests pass. I haven't tried it in Alibre.
+>
+> - **When it's enabled:** only while there's at least one fitted plane or axis.
+> - **No prompt:** it doesn't ask first, because it's a single step Undo can take back.
+> - **Saving and the log:** the part is marked changed so it saves, and the log gets `[orient] deleted all n fitted planes and axes`.
+> - **Layout:** to make room, the chosen-feature name beside the Scan button is narrower, so long names may be cut off with "…".
+>
+> I updated the spec and `CLAUDE.md`, and marked Delete, Find Symmetry and Mid Plane as tested from your last message. One thing to check: I took "remove all scan geometry" to mean the fitted planes and axes only, not the scan mesh. If you meant the mesh as well, say so.
+>
+> Alibre needs restarting to load the new version.
+>
+> **To test in Alibre**
+> 1. In Orient, fit a few planes and axes and add a symmetry plane. Click Delete All: they should all go, and the box's own planes and axes should stay.
+> 2. Check that Delete All is greyed once nothing fitted is left.
+> 3. Click Undo. Everything should come back.
+> 4. Delete All, then save and reopen the part. They should stay gone.
+> 5. Check that the Scan feature name and the two Delete buttons don't overlap.
+
+### 🧑 Frank · 15:21
+
+> Delete all passed, but it should prompt, warning you are about to remove all
+
+### 🤖 Claude
+
+> Builds clean. Updating the spec and `CLAUDE.md`, then installing.

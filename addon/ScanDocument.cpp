@@ -241,6 +241,26 @@ void ScanDocument::AddFitted(const scancore::Feature& feature)
     unsaved = true;     // saved with the scan
 }
 
+void ScanDocument::DeleteFitted(size_t index)
+{
+    if (index >= fitted.size())
+        return;
+    Remember();
+    fitted.erase(fitted.begin() + static_cast<std::ptrdiff_t>(index));
+    chosen = -1;
+    unsaved = true;     // saved with the scan
+}
+
+void ScanDocument::DeleteAllFitted()
+{
+    if (fitted.empty())
+        return;
+    Remember();
+    fitted.clear();
+    chosen = -1;
+    unsaved = true;     // saved with the scan
+}
+
 void ScanDocument::Undo()
 {
     if (m_undo.empty())

@@ -337,6 +337,12 @@ STDMETHODIMP CScanViewCommand::OnClick(long screenX, long screenY, enum ADDONMou
         bool handled = false;
         if (pScan->clickMode == ScanDocument::ClickMode::Scan && (pScan->orienting || pScan->sectioning))
             handled = PickFeature(*pScan, screenX, screenY);
+        else if (pScan->orienting && pScan->clickMode == ScanDocument::ClickMode::MidPlane)
+        {
+            handled = PickFeature(*pScan, screenX, screenY);
+            if (handled)
+                OrientMidPlanePicked();
+        }
         else if (pScan->orienting && (pScan->clickMode == ScanDocument::ClickMode::Area ||
                                       pScan->clickMode == ScanDocument::ClickMode::Cylinder))
             handled = GrowAt(*pScan, screenX, screenY);

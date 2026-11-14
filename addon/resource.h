@@ -95,14 +95,18 @@
 #define IDC_SURF_BOX                    13112
 #define IDC_SURF_OFFSET                 13113
 #define IDC_SURF_SELECTION              13114
+#define IDC_OR_DELETE                   13115
+#define IDC_OR_FIND_SYMMETRY            13116
+#define IDC_OR_MID_PLANE                13117
+#define IDC_OR_DELETE_ALL               13118
 
 // Next default values for new objects
 //
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        13115
+#define _APS_NEXT_RESOURCE_VALUE        13119
 #define _APS_NEXT_COMMAND_VALUE         32771
-#define _APS_NEXT_CONTROL_VALUE         13115
-#define _APS_NEXT_SYMED_VALUE           13115
+#define _APS_NEXT_CONTROL_VALUE         13119
+#define _APS_NEXT_SYMED_VALUE           13119
 #endif
 #endif
