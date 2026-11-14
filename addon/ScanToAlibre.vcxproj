@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <!-- x64 only: Alibre Design is 64-bit and will not load a 32-bit add-on. -->
   <ItemGroup Label="ProjectConfigurations">
@@ -155,6 +155,7 @@
   </ItemGroup>
   <ItemGroup>
     <Image Include="res\ScanToAlibre.ico" />
+    <Image Include="res\ShowScan.ico" />
   </ItemGroup>
   <ItemGroup>
     <None Include="ScanToAlibre.def" />
@@ -175,7 +176,7 @@
 
   <!-- Put the .adc and .ico beside the DLL so the output folder is a complete add-on. -->
   <Target Name="CopyAddOnFiles" AfterTargets="Build">
-    <Copy SourceFiles="$(ProjectDir)ScanToAlibre.adc;$(ProjectDir)res\ScanToAlibre.ico"
+    <Copy SourceFiles="$(ProjectDir)ScanToAlibre.adc;$(ProjectDir)res\ScanToAlibre.ico;$(ProjectDir)res\ShowScan.ico"
           DestinationFolder="$(OutDir)"
           SkipUnchangedFiles="true" />
   </Target>

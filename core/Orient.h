@@ -69,6 +69,10 @@ namespace scancore
         Point3 direction;
         std::string name;               // UTF-8, for showing
         double halfWidth = 0.0;         // for drawing a plane: half the side of its square; an axis's half length
+        // A plane of symmetry (Find Symmetry or Mid Plane), which Section's and
+        // Silhouette's Symmetric intent uses. Kept apart from the name, which
+        // the Scan tab can change.
+        bool symmetry = false;
 
         void ApplyTransform(const Transform& transform);
     };

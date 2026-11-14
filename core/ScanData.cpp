@@ -65,25 +65,40 @@ namespace scancore
         }
     }
 
+    namespace
+    {
+        std::string WriteWithFeatures(const ScanData& scan, uint32_t version)
+        {
+            std::string out = WriteMesh(scan, version);
+            Put<uint32_t>(out, static_cast<uint32_t>(scan.features.size()));
+            for (const Feature& f : scan.features)
+            {
+                const uint8_t kind = (f.kind == Feature::Kind::Plane) ? 0 : (f.kind == Feature::Kind::Axis) ? 1 : 2;
+                Put<uint8_t>(out, kind);
+                for (double v : { f.point.x, f.point.y, f.point.z, f.direction.x, f.direction.y, f.direction.z, f.halfWidth })
+                    Put<double>(out, v);
+                Put<uint32_t>(out, static_cast<uint32_t>(f.name.size()));
+                out += f.name;
+                if (version >= 3)
+                    Put<uint8_t>(out, f.symmetry ? 1 : 0);
+            }
+            return out;
+        }
+    }
+
     std::string WriteScanData(const ScanData& scan)
     {
-        std::string out = WriteMesh(scan, kScanDataVersion);
-        Put<uint32_t>(out, static_cast<uint32_t>(scan.features.size()));
-        for (const Feature& f : scan.features)
-        {
-            const uint8_t kind = (f.kind == Feature::Kind::Plane) ? 0 : (f.kind == Feature::Kind::Axis) ? 1 : 2;
-            Put<uint8_t>(out, kind);
-            for (double v : { f.point.x, f.point.y, f.point.z, f.direction.x, f.direction.y, f.direction.z, f.halfWidth })
-                Put<double>(out, v);
-            Put<uint32_t>(out, static_cast<uint32_t>(f.name.size()));
-            out += f.name;
-        }
-        return out;
+        return WriteWithFeatures(scan, kScanDataVersion);
     }
 
     std::string WriteScanDataVersion1(const ScanData& scan)
     {
         return WriteMesh(scan, 1);
+    }
+
+    std::string WriteScanDataVersion2(const ScanData& scan)
+    {
+        return WriteWithFeatures(scan, 2);
     }
 
     ScanDataStatus ReadScanData(const std::string& bytes, ScanData& scan, std::string& message)
@@ -168,6 +183,18 @@ namespace scancore
             f.halfWidth = v[6];
             f.name.assign(bytes.data() + at, length);
             at += length;
+            if (version >= 3)
+            {
+                uint8_t featureFlags = 0;
+                if (!Get(bytes, at, featureFlags))
+                    return Damaged(scan, message, "it ends early, in its fitted planes and axes.");
+                f.symmetry = (featureFlags & 1) != 0;
+            }
+            else
+            {
+                f.symmetry = f.kind == Feature::Kind::Plane &&
+                             (f.name.rfind("Symmetry plane", 0) == 0 || f.name.rfind("Mid plane", 0) == 0);
+            }
             scan.features.push_back(f);
         }
         if (at != bytes.size())

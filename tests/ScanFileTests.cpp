@@ -228,11 +228,17 @@ TEST_CASE("fitted planes and axes are saved with the scan and read back")
     axis.direction = { 1.0, 0.0, 0.0 };
     axis.halfWidth = 7.0;
     axis.name = "Axis 1 (diameter 12.030, hole)";
-    scan.features = { plane, axis };
+    Feature mirror = plane;
+    mirror.name = "Renamed symmetry";       // the flag, not the name, says it's a plane of symmetry
+    mirror.symmetry = true;
+    scan.features = { plane, axis, mirror };
 
     ScanData back;
     REQUIRE(ReadScanData(WriteScanData(scan), back, message) == ScanDataStatus::Ok);
-    REQUIRE(back.features.size() == 2);
+    REQUIRE(back.features.size() == 3);
+    CHECK(!back.features[0].symmetry);
+    CHECK(back.features[2].symmetry);
+    CHECK(back.features[2].name == "Renamed symmetry");
     CHECK(back.features[0].kind == Feature::Kind::Plane);
     CHECK(back.features[0].point.y == -2.25);
     CHECK(back.features[0].direction.z == 0.8);
@@ -244,7 +250,8 @@ TEST_CASE("fitted planes and axes are saved with the scan and read back")
 
     // A damaged feature (an unknown kind) is refused, not half read.
     std::string bytes = WriteScanData(scan);
-    const size_t firstKind = bytes.size() - (1 + 7 * 8 + 4 + axis.name.size()) - (1 + 7 * 8 + 4 + plane.name.size());
+    const size_t firstKind = bytes.size() - (1 + 7 * 8 + 4 + mirror.name.size() + 1) -
+                             (1 + 7 * 8 + 4 + axis.name.size() + 1) - (1 + 7 * 8 + 4 + plane.name.size() + 1);
     bytes[firstKind] = 7;
     CHECK(ReadScanData(bytes, back, message) == ScanDataStatus::Damaged);
     CHECK(back.features.empty());
@@ -252,6 +259,39 @@ TEST_CASE("fitted planes and axes are saved with the scan and read back")
     // Cut off part way through the features.
     const std::string whole = WriteScanData(scan);
     CHECK(ReadScanData(whole.substr(0, whole.size() - 5), back, message) == ScanDataStatus::Damaged);
+}
+
+TEST_CASE("scan data from version 2 reads, its planes of symmetry known by their names")
+{
+    ScanData scan;
+    std::string message;
+    ScanFileInfo info;
+    REQUIRE(ParseScanFile(BinaryPly(false), "Mesh.ply", scan.mesh, info, message));
+    Feature plane;
+    plane.kind = Feature::Kind::Plane;
+    plane.direction = { 1.0, 0.0, 0.0 };
+    plane.name = "Plane 1";
+    Feature symmetry = plane;
+    symmetry.name = "Symmetry plane 1";
+    Feature mid = plane;
+    mid.name = "Mid plane 2";
+    Feature axis;
+    axis.kind = Feature::Kind::Axis;
+    axis.direction = { 0.0, 0.0, 1.0 };
+    axis.name = "Symmetry plane axis";      // not a plane, so never one
+    scan.features = { plane, symmetry, mid, axis };
+    const std::string bytes = WriteScanDataVersion2(scan);
+    uint32_t version = 0;
+    std::memcpy(&version, bytes.data() + 8, 4);
+    CHECK(version == 2);
+
+    ScanData back;
+    REQUIRE(ReadScanData(bytes, back, message) == ScanDataStatus::Ok);
+    REQUIRE(back.features.size() == 4);
+    CHECK(!back.features[0].symmetry);
+    CHECK(back.features[1].symmetry);
+    CHECK(back.features[2].symmetry);
+    CHECK(!back.features[3].symmetry);
 }
 
 TEST_CASE("scan data from version 1 still reads, with no fitted features")

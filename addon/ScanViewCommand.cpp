@@ -731,30 +731,37 @@ void CScanViewCommand::DrawOrient(IADAddOnCanvasDisplay* pCanvas, ScanDocument& 
         const bool chosen = static_cast<int>(i) == scan.chosen;
         long rgb[3];
         FeatureColour(f, static_cast<int>(i), chosen, rgb);
-        const std::wstring name(f.name.begin(), f.name.end());
-        const __int64 segment = AddSegment(pCanvas, name.c_str(), rgb[0], rgb[1], rgb[2], true);
-        pCanvas->SetLineWeight(segment, chosen ? 3.0f : (f.kind == Feature::Kind::Plane ? 1.0f : 2.0f));
-        if (f.kind == Feature::Kind::Plane)
-        {
-            Point3 u, v;
-            PlaneDirections(f, scan.box, u, v);
-            const double h = f.halfWidth;
-            const Point3 c = f.point;
-            DrawPolyline(pCanvas, segment,
-                         { c + (u + v) * h, c + (v - u) * h, c - (u + v) * h, c + (u - v) * h, c + (u + v) * h }, unit);
-            DrawPolyline(pCanvas, segment, { c - u * h, c + u * h }, unit);
-            DrawPolyline(pCanvas, segment, { c - v * h, c + v * h }, unit);
-        }
-        else if (f.kind == Feature::Kind::Axis)
-        {
-            DrawPolyline(pCanvas, segment, { f.point - f.direction * f.halfWidth, f.point + f.direction * f.halfWidth },
-                         unit);
-        }
-        else
-        {
-            pCanvas->DrawMarker(segment, static_cast<float>(f.point.x / unit), static_cast<float>(f.point.y / unit),
-                                static_cast<float>(f.point.z / unit), chosen ? 16 : 10, MarkerType_MARKER_ASTERISK);
-        }
+        DrawScanFeature(pCanvas, scan, f, rgb, chosen);
+    }
+}
+
+void DrawScanFeature(IADAddOnCanvasDisplay* pCanvas, const ScanDocument& scan, const Feature& f, const long rgb[3],
+                     bool chosen)
+{
+    const double unit = scan.MillimetresPerUnit();
+    const std::wstring name(f.name.begin(), f.name.end());
+    const __int64 segment = AddSegment(pCanvas, name.c_str(), rgb[0], rgb[1], rgb[2], true);
+    pCanvas->SetLineWeight(segment, chosen ? 3.0f : (f.kind == Feature::Kind::Plane ? 1.0f : 2.0f));
+    if (f.kind == Feature::Kind::Plane)
+    {
+        Point3 u, v;
+        PlaneDirections(f, scan.box, u, v);
+        const double h = f.halfWidth;
+        const Point3 c = f.point;
+        DrawPolyline(pCanvas, segment,
+                     { c + (u + v) * h, c + (v - u) * h, c - (u + v) * h, c + (u - v) * h, c + (u + v) * h }, unit);
+        DrawPolyline(pCanvas, segment, { c - u * h, c + u * h }, unit);
+        DrawPolyline(pCanvas, segment, { c - v * h, c + v * h }, unit);
+    }
+    else if (f.kind == Feature::Kind::Axis)
+    {
+        DrawPolyline(pCanvas, segment, { f.point - f.direction * f.halfWidth, f.point + f.direction * f.halfWidth },
+                     unit);
+    }
+    else
+    {
+        pCanvas->DrawMarker(segment, static_cast<float>(f.point.x / unit), static_cast<float>(f.point.y / unit),
+                            static_cast<float>(f.point.z / unit), chosen ? 16 : 10, MarkerType_MARKER_ASTERISK);
     }
 }
 

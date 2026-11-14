@@ -125,9 +125,10 @@ STDMETHODIMP CAddOnInterface::SubMenuItems(long menuID, SAFEARRAY** pSubMenuIDs)
     if (menuID != MENU_ID_ROOT)
         return S_OK;
 
-    // The workflow, in order, then Show Scan and About. Insert Test Surface proved
-    // surface insertion and is left off (SurfaceTest still has it).
-    const long children[] = { MENU_ID_LOAD, MENU_ID_REFINE, MENU_ID_ORIENT, MENU_ID_SECTION, MENU_ID_SURFACE, MENU_ID_SILHOUETTE, MENU_ID_COMPARE, MENU_ID_SHOW_SCAN, MENU_ID_ABOUT };
+    // Show Scan first (Frank's request), then the workflow, in order, then
+    // About. Insert Test Surface proved surface insertion and is left off
+    // (SurfaceTest still has it).
+    const long children[] = { MENU_ID_SHOW_SCAN, MENU_ID_LOAD, MENU_ID_REFINE, MENU_ID_ORIENT, MENU_ID_SECTION, MENU_ID_SURFACE, MENU_ID_SILHOUETTE, MENU_ID_COMPARE, MENU_ID_ABOUT };
     const ULONG count = static_cast<ULONG>(sizeof(children) / sizeof(children[0]));
 
     // The caller takes ownership of the array.
@@ -253,8 +254,9 @@ STDMETHODIMP CAddOnInterface::MenuItemToolTip(long menuID, BSTR* pToolTip)
                             L"The part is read when it opens; open it again after changing the part.").Detach();
         break;
     case MENU_ID_SHOW_SCAN:
-        *pToolTip = _bstr_t(L"Show this part's scan, and keep it showing through other commands such as Measure. "
-                            L"Click again to hide it.").Detach();
+        *pToolTip = _bstr_t(L"Show this part's scan, kept showing through other commands such as Measure, and a "
+                            L"Scan tab in the Design Explorer listing its fitted planes and axes (click one to "
+                            L"show it; right-click to rename or delete it). Click again to hide them.").Detach();
         break;
     case MENU_ID_TEST_SURFACE:
         *pToolTip = IsAlibreVersionSupported()
@@ -624,7 +626,10 @@ STDMETHODIMP CAddOnInterface::MenuIcon(long menuID, BSTR* pMenuIconPath)
 
     // The icon is deployed beside the DLL. Resolve it from our own module,
     // never from the current working directory.
+    // Show Scan has its own image (Frank's request): an eye over a scanned mesh.
     CString iconPath = GetModuleFolder() + L"ScanToAlibre.ico";
+    if (menuID == MENU_ID_SHOW_SCAN && GetFileAttributesW(GetModuleFolder() + L"ShowScan.ico") != INVALID_FILE_ATTRIBUTES)
+        iconPath = GetModuleFolder() + L"ShowScan.ico";
     if (GetFileAttributesW(iconPath) != INVALID_FILE_ATTRIBUTES)
         *pMenuIconPath = _bstr_t(static_cast<LPCWSTR>(iconPath)).Detach();
 

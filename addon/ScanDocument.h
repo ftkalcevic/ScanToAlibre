@@ -62,6 +62,9 @@ struct ScanDocument
     double growAngle = 10.0;                    // degrees
     double growDistance = 0.2;                  // mm
     int chosen = -1;                            // in Features(), or -1
+    // The fitted plane or axis chosen in the Scan tab's tree (an index into
+    // fitted, or -1), drawn by Show Scan.
+    int shownFitted = -1;
     bool haveTarget = false;                    // Alibre geometry clicked in the view
     scancore::Feature target;                   // in mm
 
@@ -200,6 +203,8 @@ struct ScanDocument
     // Removes fitted[index] (not the box's own planes, axes and centre).
     void DeleteFitted(size_t index);
     void DeleteAllFitted();                                       // every fitted plane and axis
+    // Renames fitted[index] (from the Scan tab); false if it's empty or the same.
+    bool RenameFitted(size_t index, const std::string& name);
     bool CanUndo() const { return !m_undo.empty(); }
     void Undo();
 

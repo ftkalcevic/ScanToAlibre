@@ -646,6 +646,7 @@ void COrientDlg::OnFindSymmetry()
     }
     Feature plane = pBest->plane;
     plane.name = "Symmetry plane " + std::to_string(NextNumber(pScan->fitted, "Symmetry plane "));
+    plane.symmetry = true;
     Log(L"[orient] %S: normal (%.5f, %.5f, %.5f), point (%.3f, %.3f, %.3f)", plane.name.c_str(), plane.direction.x,
         plane.direction.y, plane.direction.z, plane.point.x, plane.point.y, plane.point.z);
     CString status;
@@ -705,6 +706,7 @@ void COrientDlg::MidPlanePicked()
     if (a.kind == Feature::Kind::Point)
         plane.halfWidth = (std::max)({ pScan->box.halfSize[0], pScan->box.halfSize[1], pScan->box.halfSize[2] });
     plane.name = "Mid plane " + std::to_string(NextNumber(pScan->fitted, "Mid plane "));
+    plane.symmetry = true;
     Log(L"[orient] %S between %S and %S: normal (%.5f, %.5f, %.5f), point (%.3f, %.3f, %.3f)", plane.name.c_str(),
         a.name.c_str(), b.name.c_str(), plane.direction.x, plane.direction.y, plane.direction.z, plane.point.x,
         plane.point.y, plane.point.z);

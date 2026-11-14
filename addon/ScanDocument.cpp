@@ -186,8 +186,7 @@ void ScanDocument::SetSymmetryLine(Section& s, const scancore::SectionFrame& fra
     s.symmetryName.clear();
     std::vector<scancore::Feature> planes;
     for (const scancore::Feature& f : fitted)
-        if (f.kind == scancore::Feature::Kind::Plane &&
-            (f.name.rfind("Symmetry plane", 0) == 0 || f.name.rfind("Mid plane", 0) == 0))
+        if (f.kind == scancore::Feature::Kind::Plane && f.symmetry)
             planes.push_back(f);
     const char* worldNames[3] = { "XY", "YZ", "ZX" };
     const Point3 worldNormals[3] = { { 0, 0, 1 }, { 1, 0, 0 }, { 0, 1, 0 } };
@@ -436,6 +435,7 @@ void ScanDocument::DeleteFitted(size_t index)
     Remember();
     fitted.erase(fitted.begin() + static_cast<std::ptrdiff_t>(index));
     chosen = -1;
+    shownFitted = -1;
     unsaved = true;     // saved with the scan
 }
 
@@ -446,7 +446,18 @@ void ScanDocument::DeleteAllFitted()
     Remember();
     fitted.clear();
     chosen = -1;
+    shownFitted = -1;
     unsaved = true;     // saved with the scan
+}
+
+bool ScanDocument::RenameFitted(size_t index, const std::string& name)
+{
+    if (index >= fitted.size() || name.empty() || fitted[index].name == name)
+        return false;
+    Remember();
+    fitted[index].name = name;
+    unsaved = true;     // saved with the scan
+    return true;
 }
 
 void ScanDocument::Undo()
@@ -462,6 +473,7 @@ void ScanDocument::Undo()
     picked = std::move(last.picked);
     m_undo.pop_back();
     chosen = -1;
+    shownFitted = -1;
     if (!trianglesChanged)
         display = scancore::SimplifyForDisplay(mesh, kDisplayTriangles);    // the old shape, same triangles
     DrawingChanged(trianglesChanged);

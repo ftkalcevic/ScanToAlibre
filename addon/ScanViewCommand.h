@@ -18,6 +18,13 @@
 #include "ViewProjection.h"
 
 struct ScanDocument;
+namespace scancore { struct Feature; }
+
+// Draws a plane (outline and cross), axis (line) or point (marker) in its own
+// segment, over the model; chosen ones thicker. Shared by the scan view and
+// Show Scan (the Scan tab's chosen geometry).
+void DrawScanFeature(IADAddOnCanvasDisplay* pCanvas, const ScanDocument& scan, const scancore::Feature& feature,
+                     const long rgb[3], bool chosen);
 
 // Redraws every running scan view (after the scan changes).
 void RefreshScanViews();

@@ -3853,3 +3853,184 @@ Decisions are also recorded in the spec (`docs\SPEC.md`) and `CLAUDE.md`.
 ### 🧑 Frank · 18:28
 
 > Closed, install it
+
+### 🤖 Claude
+
+> The Show Scan fix is installed: the installed DLL matches the build (6:27:30 PM). I haven't tried it in Alibre yet.
+>
+> To test, start Alibre and go through the six checks in my last message. The key one is the second: open a dialog, close it, then turn Show Scan off. The scan should disappear straight away, without needing Measure.
+
+### 🧑 Frank · 18:33
+
+> Fixed.
+>
+> Next, Remove the static text from the scan tab. Add a Treeview to Scan tab.  In the tree, add a Node, "Scan Geometry" and add the generated axis and plane geometries.  Clicking on them will display them.  Add a right click deleted.  If they are named, allow the names to be renamed.
+
+### 🤖 Claude
+
+> I'm reusing the pattern from CAMForAlibre's tab window (tree, right-click menu, rename in place). Reading how it sizes to the tab and handles renaming.
+
+> Core first: the symmetry flag and scan data version 3.
+
+> Now the document: the tree's chosen feature, and rename.
+
+> Now a shared feature-drawing function, so Show Scan can draw the feature chosen in the tree.
+
+> Now the tab window with the tree, replacing the static text.
+
+### 🧑 Frank · 18:36
+
+> I'd like to be able to use the alibre surfaces to recreate more organic shapes like mt12.  I can do this using lofts, joining sections, but they need to have the same number of points in the polygon and similar shapes.  Surface are hard to trim if one surface isn't fully enclosed in the other.
+
+### 🤖 Claude
+
+> Writing the new ScanDisplayCommand.cpp.
+
+> There are two ways to approach this. One makes lofting reliable; the other avoids trimming altogether.
+>
+> **1. Loft-ready sections (fits Section as it is)**
+>
+> The loft problems are matching point counts and similar shapes. The add-on can solve both because it has every slice:
+> - **Section series:** a new mode that cuts N parallel planes (or planes along a path or around an axis) in one go, so you don't pick them one by one.
+> - **Same structure every slice:** fit each slice with the same number of segments, starting at the same feature and running the same way. In practice that means:
+>   - finding matching corners (sharpest turns) across neighbouring slices,
+>   - lining up their start points and directions,
+>   - splitting longer segments where one slice has fewer pieces.
+>
+>   Arcs make this harder, because a neighbouring slice might fit an arc where this one fits two lines. A **spline-per-slice option** is simpler and lofts better: each slice becomes one closed spline with the same number of control points, spaced by arc length from a matched start. Alibre lofts between splines with matching control points cleanly.
+> - **Guide curves:** where corners exist, a silhouette or a section along the length gives curves the loft can follow, which stops it twisting.
+>
+> Even then, lofts give a closed body only where the shape really is a swept section. On something like mt12, the bosses and the transitions into the flanges won't loft.
+>
+> **2. Patch surfaces that are already trimmed (avoids your trimming problem)**
+>
+> 5 Surface already fits a B-spline patch to a selected area and exports IGES. The trimming pain comes from patches that overlap or leave gaps. Instead, the add-on could:
+> - split the scan into regions whose shared edges meet exactly (quad-like patches),
+> - fit each patch with those boundary curves held fixed,
+> - export them together, so Alibre's knit or sew gives a closed body without trimming.
+>
+> This is how reverse-engineering tools handle organic parts. It's the larger job: laying out the patch boundaries, either drawn by you or proposed from curvature, is the hard part.
+>
+> **What I'd suggest:** start with option 1's spline sections. They build on Section and tell us quickly whether Alibre's loft copes with mt12's main body. Option 2 would be a later step for the bits a loft can't do.
+>
+> Which way do you want to go? And could you give me a rough idea of where mt12's lofts fail today: point counts only, or also the shapes changing along the length (things appearing or disappearing)?
+
+> Before building I'll make two fixes: rebuilding the tree inside the rename notification is risky, so rename will just set the item's text; and the file needs CRLF line endings.
+
+> The Alibre interface is in its own namespace, so I'll drop my forward declaration. The header edits for `UpdateTree` also look missing; checking.
+
+> Clean build, and all 94 core tests pass. Installing.
+
+> Installed. Now the docs.
+
+> That spec sentence I edited last turn reads badly ("...turned it off and **About**"). I'll fix it while adding the Scan tab.
+
+> The Scan tab now has a tree instead of the static text. It's built, all 94 core tests pass, and it's installed (6:38:14 PM, matching the build). I haven't tried it in Alibre yet.
+>
+> **What it does**
+> - **Tree:** a **Scan Geometry** node with every fitted plane, axis and point under it. It refreshes when geometry is fitted, deleted, renamed or undone in Orient.
+> - **Clicking an item** draws it in yellow over the model. Clicking the Scan Geometry node clears it.
+> - **Right-click** gives **Rename** (edited in place in the tree) and **Delete**. F2 and the Delete key do the same.
+> - **Delete doesn't prompt**, like Orient's Delete; Orient's Undo brings the item back. Renames can be undone too.
+>
+> **One change you didn't ask for:** Symmetric design intent found symmetry planes by their names ("Symmetry plane…" and "Mid plane…"). Renaming one would have quietly stopped Symmetric from working. Each plane now carries a saved symmetry flag, set by Find Symmetry and Mid Plane, which means:
+> - Parts save the scan in format version 3.
+> - Older parts still load, with the flag worked out from the names.
+> - A part saved by this add-on won't open in an older copy of it.
+>
+> **Not proven:** whether typing in the rename box reaches it, or whether Alibre takes the keys as shortcuts. CAMForAlibre's folder rename has the same open question.
+>
+> **To test in Alibre**
+> 1. Turn Show Scan on. The Scan tab should show **Scan Geometry** with your fitted planes and axes, and no text.
+> 2. Click a plane, then an axis. Each should draw in yellow, and clicking Scan Geometry should clear it.
+> 3. Right-click an item and choose Rename, type a name and press Enter. Check that typing works and the name sticks. Then try F2 and Escape.
+> 4. Rename a symmetry plane, then use Symmetric in Section. It should still find the plane, and the status line should show the new name.
+> 5. Right-click Delete, and try the Delete key. The item should go, the yellow drawing should clear, and Orient's Undo should bring it back.
+> 6. With Orient open, fit a plane and delete one in Orient. The tree should follow.
+> 7. Save the part, reopen it, and check the names and the symmetry plane come back.
+> 8. Resize the Design Explorer. The tree should fill the tab.
+
+### 🧑 Frank · 18:42
+
+> Replace the "Show Scan" ribbon button with something more fitting of the action.  Move it to the first position in the ribbon
+
+### 🤖 Claude
+
+> I'll name it **Scan Explorer**: it now opens a Scan tab in the Design Explorer with the geometry tree, as well as showing the scan. Checking for user-facing text that mentions "Show Scan".
+
+> Making the code changes and the doc edits together.
+
+*(Frank stopped Claude here.)*
+
+### 🧑 Frank · 18:43
+
+> Stop
+
+### 🤖 Claude
+
+> I've stopped. The build-and-install command was interrupted part way, so it may not have finished: the installed add-on may not match the build, or may still be the previous version.
+>
+> Where it stands:
+> - **Code:** the button reads **Scan Explorer** and is first on the ribbon, with a tooltip that mentions the Scan tab. Log lines and comments say Scan Explorer instead of Show Scan.
+> - **Docs:** README, spec, `TODO.md` and `CLAUDE.md` are updated.
+> - **Not done:** I haven't checked whether the build succeeded or the install ran. Nothing has been tried in Alibre, and I haven't rebuilt the discussion file this turn.
+>
+> I'll wait for you to say how to go on.
+
+### 🧑 Frank · 18:43
+
+> Replace the "Show Scan" ribbon button IMAGE with something more fitting of the action.  Move it to the first position in the ribbon
+
+### 🤖 Claude
+
+> You meant the image, not the name, so I'll put the name back to "Show Scan", keep it first on the ribbon, and give it its own icon. Checking how the ribbon icons are set.
+
+> The interrupted install never ran: the installed DLL is still the 6:38 one. Reverting the name now.
+
+> Name is back to Show Scan everywhere. Now the image: I'll look at the current icon so the new one matches its style.
+
+> Drawing a Show Scan icon in the same style (the blue rounded tile): an eye over a triangulated scan mesh.
+
+> It reads like a pyramid with an eye, which isn't right. I'll redraw the scan as a lower, rounder mesh with two rows of triangles, so it looks like a scanned surface.
+
+> It now reads as an eye over a scanned mesh, and stays legible at 16 px. Wiring it in: the ribbon, the project copy step, and the installer.
+
+> Built, and the icon is copied beside the DLL. You stopped the last install, so I'll ask before installing this time. Finishing the docs first.
+
+> Show Scan keeps its name, comes first on the ribbon, and has a new image. It's built cleanly but not installed, and not yet seen in Alibre.
+>
+> - **Name:** I'd misread your earlier request and renamed it "Scan Explorer". It's back to **Show Scan** everywhere: the button, logs, comments and docs.
+> - **Position:** it's now the first button on the ScanToAlibre ribbon tab, before 1 Load.
+> - **Image:** a new `addon\res\ShowScan.ico` in the add-on's blue tile style, an eye over a triangulated scan. I checked that it's still readable at 16 px. The other buttons keep the existing drill icon.
+> - **Installer:** the new icon is copied next to the DLL by both the build and `deploy\install.ps1`.
+> - **Tooltip:** it now also mentions the Scan tab and its geometry tree.
+>
+> **To test once it's installed**
+> 1. Restart Alibre and open a part. Show Scan should be the first button on the ScanToAlibre tab, with the eye-and-mesh image.
+> 2. Check the image at your ribbon size and when the button is checked (Show Scan on).
+> 3. Hover over it to read the new tooltip.
+
+### 🧑 Frank · 18:46
+
+> Install it
+
+### 🤖 Claude
+
+> It's installed. The new `ShowScan.ico` is next to the DLL, and the installed DLL matches the build (6:45:33 PM). I haven't seen it in Alibre yet.
+>
+> This install also brings in the Scan tab's tree. You haven't tested that yet, so it's worth running through both test lists.
+>
+> **To check the ribbon**
+> 1. Start Alibre and open a part. Show Scan should be the first button on the ScanToAlibre tab, with the eye-over-mesh image.
+> 2. Check how the image looks at your ribbon size, and when Show Scan is on (checked).
+> 3. Hover over it to read the tooltip, which now mentions the Scan tab.
+
+### 🧑 Frank · 18:48
+
+> Test ok
+
+> <local-command-stdout>Compacted </local-command-stdout>
+
+### 🤖 Claude
+
+> Fixing a stray character in the icon path in CLAUDE.md, then rebuilding the discussion.

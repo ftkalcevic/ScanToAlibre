@@ -11,6 +11,10 @@
 // tab, as every toggle in Alibre's samples and CAMForAlibre does (testing that
 // that cures it). While it's on, the scan view draws only Orient's geometry
 // and picked points, not the scan a second time.
+//
+// The Scan tab holds a tree (Frank's request): "Scan Geometry" with the
+// fitted planes, axes and points under it. Clicking one draws it (yellow, over
+// the model); right-click gives Rename (edited in place) and Delete.
 
 #pragma once
 
@@ -36,11 +40,13 @@ public:
     STDMETHOD(OnTerminate)() override;
 
     const std::wstring& SessionId() const { return m_sessionId; }
+    // Fills the tree again if the fitted geometry changed.
+    void UpdateTree();
 
 private:
     std::wstring m_sessionId;
     int m_renders = 0;
-    HWND m_label = nullptr;     // the tab's text
+    class CScanTabWnd* m_pWnd = nullptr;    // the tab's window, with the tree
 };
 
 // The part's Show Scan command while it's on, or nullptr.

@@ -1,9 +1,9 @@
-<#
+﻿<#
 .SYNOPSIS
     Installs the ScanToAlibre add-on into Alibre Design.
 
 .DESCRIPTION
-    1. Copies ScanToAlibre.dll, ScanToAlibre.adc and ScanToAlibre.ico from the build output to
+    1. Copies ScanToAlibre.dll, ScanToAlibre.adc, ScanToAlibre.ico and ShowScan.ico from the build output to
        %ProgramData%\Alibre AddOns\ScanToAlibre\
     2. Registers the add-on under HKLM\SOFTWARE\Alibre Design Add-Ons
        (value name = add-on GUID, data = install folder).
@@ -39,7 +39,7 @@ try {
     # --- Locate build output --------------------------------------------------
     $projectDir = Split-Path -Parent $PSScriptRoot
     $buildDir   = Join-Path $projectDir "bin\x64\$Configuration"
-    $files      = @("$AddOnName.dll", "$AddOnName.adc", "$AddOnName.ico")
+    $files      = @("$AddOnName.dll", "$AddOnName.adc", "$AddOnName.ico", "ShowScan.ico")
 
     foreach ($f in $files) {
         if (-not (Test-Path (Join-Path $buildDir $f))) {

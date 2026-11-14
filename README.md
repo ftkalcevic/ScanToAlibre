@@ -2,7 +2,7 @@
 
 An add-on for Alibre Design that helps turn a 3D scan (an STL mesh or a point cloud) into an editable Alibre part. You pick out features on the scan (planes, cylinders, sections), and it creates Alibre sketches and features from them. Freeform areas get fitted B-spline surfaces inserted into the part.
 
-Status: early. The add-on gets its own **ScanToAlibre** ribbon tab, whose buttons are the workflow, in order. In a part:
+Status: early. The add-on gets its own **ScanToAlibre** ribbon tab. First is **Show Scan**, which shows or hides the scan and a Scan tab in the Design Explorer listing its fitted planes and axes (click one to show it; right-click to rename or delete it). Then the workflow, in order. In a part:
 
 1. **Load** reads a scan (STL, or PLY: a mesh, or a point cloud with normals, which it makes into a mesh) and shows it in the view. The scan is saved inside the part when you save the part. Left-click on it to pick points. F switches between full detail and simplified, and C clears the picked points.
 2. **Refine** decimates the scan to fewer triangles and smooths it (Laplacian, Taubin or Bilateral), in a dialog that stays open while you work. Changes apply straight away; Undo takes them back.
@@ -13,7 +13,7 @@ Status: early. The add-on gets its own **ScanToAlibre** ribbon tab, whose button
 6. **Silhouette** makes a sketch of the scan's outline seen along a plane's normal, with every separate piece and through-hole, fitted and constrained as Section's are. It catches tabs and flanges that a slice at one height misses.
 7. **Compare** colours the scan by its distance from the part as built so far (blues inside, green within a tolerance, yellow to red outside, grey where the part isn't modelled yet), with statistics, and Probe reads the distance where you click.
 
-Then **Show Scan**, which shows or hides the scan, and **About**.
+Then **About**.
 
 See `docs\SPEC.md` for the plan.
 

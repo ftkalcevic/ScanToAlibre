@@ -14,7 +14,9 @@
 //     uint8     kind: 0 plane, 1 axis, 2 point
 //     float64   point x, y, z (mm), direction x, y, z (unit), half width (mm, for drawing)
 //     uint32    name length, then the name in UTF-8
-// Version 1 reads with no features. A newer version is refused, so it's never
+//     uint8     flags (version 3 on): 1 a plane of symmetry
+// Version 1 reads with no features. In version 2 a plane named "Symmetry
+// plane..." or "Mid plane..." is a plane of symmetry, as names were then fixed. A newer version is refused, so it's never
 // overwritten by an older add-on.
 
 #pragma once
@@ -27,7 +29,7 @@
 
 namespace scancore
 {
-    const unsigned kScanDataVersion = 2;
+    const unsigned kScanDataVersion = 3;
 
     struct ScanData
     {
@@ -48,6 +50,7 @@ namespace scancore
 
     ScanDataStatus ReadScanData(const std::string& bytes, ScanData& scan, std::string& message);
 
-    // Version 1 exactly, for testing that it still reads.
+    // Version 1 and 2 exactly, for testing that they still read.
     std::string WriteScanDataVersion1(const ScanData& scan);
+    std::string WriteScanDataVersion2(const ScanData& scan);
 }
