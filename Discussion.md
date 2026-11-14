@@ -1696,3 +1696,28 @@ Decisions are also recorded in the spec (`docs\SPEC.md`) and `CLAUDE.md`.
 > <local-command-stdout>Compacted </local-command-stdout>
 
 > test passed.
+
+### 🤖 Claude
+
+> Good. Scan plane picking is now marked in ScanToAlibre's `CLAUDE.md` as installed and tested by you. I also rebuilt both `Discussion.md` files.
+>
+> One earlier fix still needs testing: the sketch from 4 Section getting its constraints and dimensions. When you try it, make a section with Create Sketch. Check that the sketch has horizontal, vertical and tangent constraints and rounded radius dimensions, and that the `[section]` lines in the log show constraints added rather than 0.
+
+### 🧑 Frank · 13:00
+
+> dimension worked correctly.
+
+### 🤖 Claude
+
+> Good, the dimensions work. I checked the log and the constraints went in too: your last two sketches each got 14 constraints and 5 dimensions, with none refused. Each also had 387 construction lines and took about 4 seconds. I've recorded this in ScanToAlibre's `CLAUDE.md` and rebuilt both `Discussion.md` files.
+>
+> The log also showed:
+> - **Making the plane from plain points always fails.** When the section plane comes from the scan, the code first asks Alibre for a plane through three plain points. Alibre refuses every time with "Cannot create plane with Collinear points", although the points aren't in a line. The code then makes three design points and builds the plane through those, which works every time. So the first attempt only adds a log line and about 0.1 s.
+> - **One sketch at 12:53 failed while adding the figures.** Its error was the same "collinear points" text, probably left over from the refused plane, so the real cause wasn't logged. The two runs after it worked. If the plain-point attempt is removed, a failure like that would show its own error.
+> - **Finding figures by ID doesn't work.** Every figure had an ID, but 31 lookups by ID failed, so the fallback that finds a figure by its object is what added the constraints.
+>
+> No code changed this turn.
+
+### 🧑 Frank · 13:01
+
+> Leave it
