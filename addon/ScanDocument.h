@@ -18,6 +18,7 @@
 #include "Mesh.h"
 #include "Orient.h"
 #include "Section.h"
+#include "SurfaceFit.h"
 
 struct ScanDocument
 {
@@ -47,8 +48,10 @@ struct ScanDocument
     // chooses one of the scan's planes, axes or its centre; Target, Alibre's own
     // selection becomes the target; Area or Cylinder, a click grows a flat area
     // or a cylinder (outside or a hole) to select.
+    // Smooth or Brush (5 Surface): a click selects a smooth area, or the
+    // triangles within a radius, to fit a surface to.
     // None, clicks are Alibre's alone.
-    enum class ClickMode { None, Scan, Target, Area, Cylinder };
+    enum class ClickMode { None, Scan, Target, Area, Cylinder, Smooth, Brush };
     bool orienting = false;
     ClickMode clickMode = ClickMode::None;
     double growAngle = 10.0;                    // degrees
@@ -79,6 +82,22 @@ struct ScanDocument
     Section section;
     // Slices and fits again (after the plane, offset, tolerance or scan changes).
     void UpdateSection();
+
+    // Surface (5 Surface): while its dialog is open, clicks in Smooth or Brush
+    // mode add to the selection (or take an area away), and the view draws the
+    // selection, the fitted surface and its outline.
+    struct Surface
+    {
+        double smoothAngle = 15.0;              // degrees between neighbouring triangles
+        double brushRadius = 3.0;               // mm
+        scancore::SurfaceFitOptions options;
+        scancore::SurfaceFitResult result;      // ok false when there's nothing fitted
+        int surfaces = 0;                       // made so far, for file names
+    };
+    bool surfacing = false;
+    Surface surface;
+    // Fits again (after the selection, an option or the scan changes).
+    void UpdateSurface();
 
     // The box's centre planes, axes and centre, then the fitted planes and axes.
     std::vector<scancore::Feature> Features() const;

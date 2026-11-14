@@ -8,6 +8,7 @@
 
 #include "OrientDialog.h"
 #include "SectionDialog.h"
+#include "SurfaceDialog.h"
 #include "ScanDisplayCommand.h"
 
 #include "Orient.h"
@@ -279,6 +280,8 @@ STDMETHODIMP CScanViewCommand::On3DRender()
                     DrawOrient(canvas, *pScan, true);
                 if (pScan->sectioning)
                     DrawSection(canvas, *pScan);
+                if (pScan->surfacing)
+                    DrawSurface(canvas, *pScan);
 
                 if (!pScan->picked.empty())
                 {
@@ -337,7 +340,10 @@ STDMETHODIMP CScanViewCommand::OnClick(long screenX, long screenY, enum ADDONMou
         else if (pScan->orienting && (pScan->clickMode == ScanDocument::ClickMode::Area ||
                                       pScan->clickMode == ScanDocument::ClickMode::Cylinder))
             handled = GrowAt(*pScan, screenX, screenY);
-        else if (!pScan->orienting && !pScan->sectioning)
+        else if (pScan->surfacing && (pScan->clickMode == ScanDocument::ClickMode::Smooth ||
+                                      pScan->clickMode == ScanDocument::ClickMode::Brush))
+            handled = SelectSurfaceAt(*pScan, screenX, screenY);
+        else if (!pScan->orienting && !pScan->sectioning && !pScan->surfacing)
             handled = Pick(*pScan, screenX, screenY);
         // A hit is ours; anything else is left to Alibre, which selects what's
         // there (with To down, its planes, axes and points become the target in
@@ -519,6 +525,90 @@ bool CScanViewCommand::GrowAt(ScanDocument& scan, long x, long y)
     OrientViewChanged();
     m_site->InvalidateCanvas();
     return true;
+}
+
+bool CScanViewCommand::SelectSurfaceAt(ScanDocument& scan, long x, long y)
+{
+    scancore::ViewProjection view;
+    if (!FitView(scan, view))
+        return false;
+    const scancore::RayHit hit = scancore::IntersectLine(scan.mesh, view.LineThrough(x, y));
+    if (!hit.hit)
+        return false;
+
+    const auto start = std::chrono::steady_clock::now();
+    const bool brush = scan.clickMode == ScanDocument::ClickMode::Brush;
+    const std::vector<int> area =
+        brush ? scancore::BrushArea(scan.mesh, scan.Neighbours(), hit.triangle, hit.point, scan.surface.brushRadius)
+              : scancore::GrowSmoothArea(scan.mesh, scan.Neighbours(), hit.triangle, scan.surface.smoothAngle);
+    const bool remove = std::binary_search(scan.selection.begin(), scan.selection.end(), hit.triangle);
+    std::vector<int> selection;
+    if (remove)
+        std::set_difference(scan.selection.begin(), scan.selection.end(), area.begin(), area.end(),
+                            std::back_inserter(selection));
+    else
+        std::set_union(scan.selection.begin(), scan.selection.end(), area.begin(), area.end(),
+                       std::back_inserter(selection));
+    Log(L"[surface] %s %zu triangles (%s from triangle %d); %zu selected, %.0f ms",
+        remove ? L"removed" : L"added", area.size(),
+        brush ? L"brush" : L"smooth area", hit.triangle, selection.size(), Milliseconds(start));
+    scan.SetSelection(std::move(selection));
+    {
+        CWaitCursor wait;
+        scan.UpdateSurface();
+    }
+    SurfaceViewChanged();
+    m_site->InvalidateCanvas();
+    return true;
+}
+
+void CScanViewCommand::DrawSurface(IADAddOnCanvasDisplay* pCanvas, ScanDocument& scan)
+{
+    const double unit = scan.MillimetresPerUnit();
+    if (const ScanDocument::DrawArrays* pSelection = scan.SelectionArrays())
+        DrawMeshArrays(pCanvas, AddSegment(pCanvas, L"Surface selection", 245, 140, 20, true), *pSelection);
+
+    const scancore::SurfaceFitResult& r = scan.surface.result;
+    if (!r.ok)
+        return;
+
+    // The surface as 21 lines each way, green.
+    const int kLines = 20, kSteps = 60;
+    const __int64 gridSegment = AddSegment(pCanvas, L"Fitted surface", 40, 190, 70, true);
+    for (int k = 0; k <= kLines; ++k)
+    {
+        const double a = static_cast<double>(k) / kLines;
+        std::vector<Point3> alongU, alongV;
+        for (int i = 0; i <= kSteps; ++i)
+        {
+            const double b = static_cast<double>(i) / kSteps;
+            alongU.push_back(scancore::Evaluate(r.surface, b, a));
+            alongV.push_back(scancore::Evaluate(r.surface, a, b));
+        }
+        DrawPolyline(pCanvas, gridSegment, alongU, unit);
+        DrawPolyline(pCanvas, gridSegment, alongV, unit);
+    }
+
+    // The perimeter, thicker yellow: the outline it's trimmed to, or for an
+    // untrimmed rectangle its edges, along the surface.
+    std::vector<Point3> loop = r.outline;
+    if (loop.empty())
+    {
+        const int kEdgeSteps = 60;
+        const double corners[5][2] = { { 0, 0 }, { 1, 0 }, { 1, 1 }, { 0, 1 }, { 0, 0 } };
+        for (int side = 0; side < 4; ++side)
+            for (int i = 0; i < kEdgeSteps; ++i)
+            {
+                const double f = static_cast<double>(i) / kEdgeSteps;
+                const double u = corners[side][0] + (corners[side + 1][0] - corners[side][0]) * f;
+                const double v = corners[side][1] + (corners[side + 1][1] - corners[side][1]) * f;
+                loop.push_back(scancore::Evaluate(r.surface, u, v));
+            }
+    }
+    const __int64 outlineSegment = AddSegment(pCanvas, L"Surface outline", 245, 200, 40, true);
+    pCanvas->SetLineWeight(outlineSegment, 3.0f);
+    loop.push_back(loop.front());
+    DrawPolyline(pCanvas, outlineSegment, loop, unit);
 }
 
 void CScanViewCommand::DrawOrient(IADAddOnCanvasDisplay* pCanvas, ScanDocument& scan, bool planesOnly)

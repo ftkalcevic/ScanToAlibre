@@ -70,14 +70,39 @@
 #define IDC_SEC_DEPTH                   13082
 #define IDC_SEC_STATUS                  13083
 #define IDC_SEC_CREATE                  13084
+#define IDD_SURFACE                     13090
+#define IDC_SURF_INFO                   13091
+#define IDC_SURF_SMOOTH                 13092
+#define IDC_SURF_BRUSH                  13093
+#define IDC_SURF_ANGLE                  13094
+#define IDC_SURF_RADIUS                 13095
+#define IDC_SURF_CLEAR                  13096
+#define IDC_SURF_SELECTED               13097
+#define IDC_SURF_BASE_AUTO              13098
+#define IDC_SURF_BASE_XY                13099
+#define IDC_SURF_BASE_YZ                13100
+#define IDC_SURF_BASE_ZX                13101
+#define IDC_SURF_SYM_XY                 13102
+#define IDC_SURF_SYM_YZ                 13103
+#define IDC_SURF_SYM_ZX                 13104
+#define IDC_SURF_PROJECTION             13105
+#define IDC_SURF_RECTANGLE              13106
+#define IDC_SURF_TOLERANCE              13107
+#define IDC_SURF_SMOOTHING              13108
+#define IDC_SURF_RESULT                 13109
+#define IDC_SURF_STATUS                 13110
+#define IDC_SURF_CREATE                 13111
+#define IDC_SURF_BOX                    13112
+#define IDC_SURF_OFFSET                 13113
+#define IDC_SURF_SELECTION              13114
 
 // Next default values for new objects
 //
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        13090
+#define _APS_NEXT_RESOURCE_VALUE        13115
 #define _APS_NEXT_COMMAND_VALUE         32771
-#define _APS_NEXT_CONTROL_VALUE         13090
-#define _APS_NEXT_SYMED_VALUE           13090
+#define _APS_NEXT_CONTROL_VALUE         13115
+#define _APS_NEXT_SYMED_VALUE           13115
 #endif
 #endif

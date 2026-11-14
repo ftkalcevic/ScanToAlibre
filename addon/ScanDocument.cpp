@@ -160,6 +160,27 @@ void ScanDocument::UpdateSection()
     section.constraints = scancore::FindConstraints(section.result.profiles, section.snap);
 }
 
+void ScanDocument::UpdateSurface()
+{
+    if (selection.empty())
+    {
+        surface.result = scancore::SurfaceFitResult();
+        return;
+    }
+    // The box round the scan, for the Box perimeter.
+    const auto corners = box.Corners();
+    surface.options.boxCorners.assign(corners.begin(), corners.end());
+    surface.result = scancore::FitScanSurface(mesh, selection, surface.options);
+    const scancore::SurfaceFitResult& r = surface.result;
+    if (r.ok)
+        Log(L"[surface] fitted %zu triangles (%zu samples): %d x %d control points, largest %.4f mm, 99%% within "
+            L"%.4f, RMS %.4f; outline %zu points; %.2f s",
+            selection.size(), r.samples, r.surface.countU, r.surface.countV, r.largest, r.within99, r.rms,
+            r.outline.size(), r.seconds);
+    else
+        Log(L"[surface] no fit for %zu triangles: %S", selection.size(), r.message.c_str());
+}
+
 std::vector<scancore::Feature> ScanDocument::Features() const
 {
     std::vector<scancore::Feature> features = scancore::BoxFeatures(box);
@@ -183,6 +204,7 @@ void ScanDocument::DrawingChanged(bool trianglesChanged)
         m_neighbours.clear();
         SetSelection({});
     }
+    surface.result = scancore::SurfaceFitResult();
     displayArrays.reset();
     fullArrays.reset();
     selectionArrays.reset();

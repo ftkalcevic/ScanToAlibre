@@ -55,11 +55,15 @@ private:
     // Section: choose the box's or a fitted plane.
     bool PickFeature(ScanDocument& scan, long x, long y);
     bool GrowAt(ScanDocument& scan, long x, long y);
+    // Surface: a smooth area or a brush's worth added to the selection, or taken away.
+    bool SelectSurfaceAt(ScanDocument& scan, long x, long y);
     bool FitView(const ScanDocument& scan, scancore::ViewProjection& view);
     // planesOnly: just the box and the planes, for choosing a section's plane.
     void DrawOrient(IADAddOnCanvasDisplay* pCanvas, ScanDocument& scan, bool planesOnly);
     // Section: the plane's outline, the slice and its fitted lines and arcs.
     void DrawSection(IADAddOnCanvasDisplay* pCanvas, ScanDocument& scan);
+    // Surface: the selection, the fitted surface as a grid of lines, and its outline.
+    void DrawSurface(IADAddOnCanvasDisplay* pCanvas, ScanDocument& scan);
     // Section: Alibre's selected design plane or flat face becomes the plane.
     void ReadSectionPlane(ScanDocument& scan);
     void ProbeScreenToWorld(long x, long y);

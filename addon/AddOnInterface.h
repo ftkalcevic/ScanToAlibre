@@ -22,6 +22,7 @@ const long MENU_ID_SHOW_SCAN    = 104;
 const long MENU_ID_REFINE       = 105;
 const long MENU_ID_ORIENT       = 106;
 const long MENU_ID_SECTION      = 107;
+const long MENU_ID_SURFACE      = 108;
 
 // Oldest Alibre build this add-on is written against (27.0.1.27039).
 const long MINIMUM_ALIBRE_BUILD = 27039;

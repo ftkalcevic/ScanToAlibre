@@ -74,6 +74,7 @@
     <ClCompile Include="ScanData.cpp" />
     <ClCompile Include="ScanFile.cpp" />
     <ClCompile Include="Smooth.cpp" />
+    <ClCompile Include="SurfaceFit.cpp" />
     <ClCompile Include="ViewProjection.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -90,6 +91,7 @@
     <ClInclude Include="ScanData.h" />
     <ClInclude Include="ScanFile.h" />
     <ClInclude Include="Smooth.h" />
+    <ClInclude Include="SurfaceFit.h" />
     <ClInclude Include="ViewProjection.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

@@ -9,6 +9,7 @@ Status: early. The add-on gets its own **ScanToAlibre** ribbon tab, whose button
 3. **Orient** moves, rotates and scales the scan, fits planes to flat areas, and lines it up with the part's planes, axes and origin in 3-2-1 steps, using a box fitted to the scan with its centre planes and axes.
 
 4. **Section** slices the scan with an Alibre plane or face, or one of the scan's planes, fits lines and arcs to the slice, and makes an Alibre sketch of them, constrained (horizontal, vertical, tangent, concentric) with rounded radii, and the slice itself as construction lines. Extrude or revolve it with Alibre's own commands.
+5. **Surface** fits a B-spline surface to areas of the scan you select (smooth areas or a brush), as heights over a base plane, optionally symmetric across XY, YZ or ZX and trimmed to the whole scan's outline or the selection's, or the rectangle round the selection or round the scan's box, made bigger by an offset if asked, and inserts it into the part to extrude up to.
 
 Then **Show Scan**, which shows the scan again after another command has ended the scan view, and **About**.
 

@@ -14,7 +14,6 @@
 - Primitive fitting with deviation maps and design-intent snapping.
 - Section to sketch: test in Alibre (built and installed); then extrude or revolve from it.
 - Holes, fillets and chamfers.
-- Freeform B-spline surface fitting and insertion.
 - Lofts and sweeps through fitted sections.
 - Deviation of the finished part against the scan.
 - Help page.
