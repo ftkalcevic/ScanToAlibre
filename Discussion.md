@@ -4648,3 +4648,37 @@ Decisions are also recorded in the spec (`docs\SPEC.md`) and `CLAUDE.md`.
 ### 🧑 Frank · 06:51
 
 > Done.  Add the "Made by AI image to the readme.md"
+
+### 🤖 Claude
+
+> I added the "Made by AI / LLM, human reviewed" badge to the top of ScanToAlibre's `README.md`, the same way CAMForAlibre's README has it. I copied the image from CAMForAlibre to `docs\made-by-ai.png`. Nothing is committed.
+
+### 🧑 Frank · 06:54
+
+> <local-command-stdout>Compacted </local-command-stdout>
+
+> Add the "Made by AI image to the readme.md"
+
+### 🤖 Claude
+
+> I've added the badge to the top of MCPForAlibre's [README.md](../MCPForAlibre/README.md), above the title, the same way AlibreCAM and ScanToAlibre have it. The image is a copy of AlibreCAM's, saved as `docs/made-by-ai.png`.
+>
+> MCPForAlibre isn't a git repository yet, so there's nothing to commit. Include the new image when you start tracking it.
+
+### 🧑 Frank · 06:56
+
+> Add the "Made by AI image to the readme.md"
+
+> <local-command-stdout>Compacted </local-command-stdout>
+
+### 🤖 Claude
+
+> I've added the "Made by AI / LLM, human reviewed" badge to the top of [README.md](../SimWiseForAlibre/README.md), above the title, the same way it appears in your other add-ons. I copied the image from this project to `SimWiseForAlibre\docs\made-by-ai.png`, which is a new file you'll need to add when you commit.
+
+### 🧑 Frank · 07:38
+
+> Add to readme.md, the images in the docs folder, scan.png, loft.png, compare.png to show a simple workflow
+
+### 🤖 Claude
+
+> Let me look at the images so the captions match what they show.
