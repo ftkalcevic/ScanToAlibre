@@ -7,9 +7,11 @@
 #include "Log.h"
 
 #include "OrientDialog.h"
+#include "SectionDialog.h"
 #include "ScanDisplayCommand.h"
 
 #include "Orient.h"
+#include "Section.h"
 #include "ViewProjection.h"
 
 #include <chrono>
@@ -272,7 +274,11 @@ STDMETHODIMP CScanViewCommand::On3DRender()
                 }
 
                 if (pScan->orienting)
-                    DrawOrient(canvas, *pScan);
+                    DrawOrient(canvas, *pScan, false);
+                else if (pScan->sectioning && pScan->clickMode == ScanDocument::ClickMode::Scan)
+                    DrawOrient(canvas, *pScan, true);
+                if (pScan->sectioning)
+                    DrawSection(canvas, *pScan);
 
                 if (!pScan->picked.empty())
                 {
@@ -326,13 +332,13 @@ STDMETHODIMP CScanViewCommand::OnClick(long screenX, long screenY, enum ADDONMou
             ProbeScreenToWorld(screenX, screenY);
         }
         bool handled = false;
-        if (!pScan->orienting)
-            handled = Pick(*pScan, screenX, screenY);
-        else if (pScan->clickMode == ScanDocument::ClickMode::Scan)
+        if (pScan->clickMode == ScanDocument::ClickMode::Scan && (pScan->orienting || pScan->sectioning))
             handled = PickFeature(*pScan, screenX, screenY);
-        else if (pScan->clickMode == ScanDocument::ClickMode::Area ||
-                 pScan->clickMode == ScanDocument::ClickMode::Cylinder)
+        else if (pScan->orienting && (pScan->clickMode == ScanDocument::ClickMode::Area ||
+                                      pScan->clickMode == ScanDocument::ClickMode::Cylinder))
             handled = GrowAt(*pScan, screenX, screenY);
+        else if (!pScan->orienting && !pScan->sectioning)
+            handled = Pick(*pScan, screenX, screenY);
         // A hit is ours; anything else is left to Alibre, which selects what's
         // there (with To down, its planes, axes and points become the target in
         // OnSelectionChange).
@@ -380,15 +386,19 @@ bool CScanViewCommand::PickFeature(ScanDocument& scan, long x, long y)
     const scancore::Ray line = view.LineThrough(x, y);
     const std::vector<Feature> features = scan.Features();
 
-    // Axes and points by how close they pass on screen; planes by where the
-    // line meets them inside their outline, the nearest first. Lines win.
+    // Axes, points and planes' drawn lines (outline and cross) by how close they
+    // pass on screen, so a plane behind another or inside the scan can be had by
+    // clicking its lines. Failing that, planes by where the line meets them inside
+    // their outline: the nearest, or if that's already chosen, the next one behind,
+    // so clicking again in the same place goes deeper.
     int best = -1;
     double bestPixels = 8.0;
-    int bestPlane = -1;
-    double bestDepth = 1e300;
+    std::vector<std::pair<double, int>> inside;     // depth, feature
     for (size_t i = 0; i < features.size(); ++i)
     {
         const Feature& f = features[i];
+        if (scan.sectioning && f.kind != Feature::Kind::Plane)
+            continue;
         if (f.kind == Feature::Kind::Axis)
         {
             const double pixels = DistanceToSegment(x, y, view.Project(f.point - f.direction * f.halfWidth),
@@ -411,31 +421,70 @@ bool CScanViewCommand::PickFeature(ScanDocument& scan, long x, long y)
         }
         else
         {
+            Point3 u, v;
+            PlaneDirections(f, scan.box, u, v);
+            const double h = f.halfWidth;
+            const Point3 c = f.point;
+            const Point3 corners[4] = { c + (u + v) * h, c + (v - u) * h, c - (u + v) * h, c + (u - v) * h };
+            const Point3 ends[6][2] = { { corners[0], corners[1] }, { corners[1], corners[2] },
+                                        { corners[2], corners[3] }, { corners[3], corners[0] },
+                                        { c - u * h, c + u * h },   { c - v * h, c + v * h } };
+            for (const auto& e : ends)
+            {
+                const double pixels = DistanceToSegment(x, y, view.Project(e[0]), view.Project(e[1]));
+                if (pixels < bestPixels)
+                {
+                    bestPixels = pixels;
+                    best = static_cast<int>(i);
+                }
+            }
+
             const double along = scancore::Dot(line.direction, f.direction);
             if (std::fabs(along) < 1e-9)
                 continue;
             const double depth = scancore::Dot(f.point - line.origin, f.direction) / along;
             const Point3 local = line.origin + line.direction * depth - f.point;
-            Point3 u, v;
-            PlaneDirections(f, scan.box, u, v);
-            if (std::fabs(scancore::Dot(local, u)) <= f.halfWidth && std::fabs(scancore::Dot(local, v)) <= f.halfWidth &&
-                depth < bestDepth)
-            {
-                bestDepth = depth;
-                bestPlane = static_cast<int>(i);
-            }
+            if (std::fabs(scancore::Dot(local, u)) <= h && std::fabs(scancore::Dot(local, v)) <= h)
+                inside.emplace_back(depth, static_cast<int>(i));
         }
     }
-    if (best < 0)
-        best = bestPlane;
+    if (best < 0 && !inside.empty())
+    {
+        std::sort(inside.begin(), inside.end());
+        size_t k = 0;
+        for (size_t j = 0; j < inside.size(); ++j)
+            if (inside[j].second == scan.chosen)
+                k = (j + 1) % inside.size();
+        best = inside[k].second;
+    }
     if (best < 0)
     {
         Log(L"[orient] click (%ld, %ld) on none of the scan's planes, axes or centre; left to Alibre", x, y);
         return false;
     }
     scan.chosen = best;
-    Log(L"[orient] chose %S", features[best].name.c_str());
-    OrientViewChanged();
+    if (scan.sectioning)
+    {
+        const Feature& f = features[best];
+        ScanDocument::Section& section = scan.section;
+        section.havePlane = true;
+        section.planeName = f.name;
+        section.point = f.point;
+        section.normal = scancore::Normalised(f.direction);
+        section.alibrePlane = nullptr;
+        section.alibreFace = false;
+        const auto start = std::chrono::steady_clock::now();
+        scan.UpdateSection();
+        Log(L"[section] plane %S: %zu polylines, %zu points, largest deviation %.4f mm, %.0f ms", f.name.c_str(),
+            section.result.profiles.size(), section.result.slicePoints, section.result.largestDeviation,
+            Milliseconds(start));
+        SectionViewChanged();
+    }
+    else
+    {
+        Log(L"[orient] chose %S", features[best].name.c_str());
+        OrientViewChanged();
+    }
     m_site->InvalidateCanvas();
     return true;
 }
@@ -472,12 +521,13 @@ bool CScanViewCommand::GrowAt(ScanDocument& scan, long x, long y)
     return true;
 }
 
-void CScanViewCommand::DrawOrient(IADAddOnCanvasDisplay* pCanvas, ScanDocument& scan)
+void CScanViewCommand::DrawOrient(IADAddOnCanvasDisplay* pCanvas, ScanDocument& scan, bool planesOnly)
 {
     const double unit = scan.MillimetresPerUnit();
 
     // The selected triangles, over the scan.
-    if (const ScanDocument::DrawArrays* pSelection = scan.SelectionArrays())
+    const ScanDocument::DrawArrays* pSelection = planesOnly ? nullptr : scan.SelectionArrays();
+    if (pSelection != nullptr)
         DrawMeshArrays(pCanvas, AddSegment(pCanvas, L"Selected area", 245, 140, 20, true), *pSelection);
 
     // The fitted box's edges.
@@ -493,6 +543,8 @@ void CScanViewCommand::DrawOrient(IADAddOnCanvasDisplay* pCanvas, ScanDocument& 
     for (size_t i = 0; i < features.size(); ++i)
     {
         const Feature& f = features[i];
+        if (planesOnly && f.kind != Feature::Kind::Plane)
+            continue;
         const bool chosen = static_cast<int>(i) == scan.chosen;
         long rgb[3];
         FeatureColour(f, static_cast<int>(i), chosen, rgb);
@@ -523,11 +575,182 @@ void CScanViewCommand::DrawOrient(IADAddOnCanvasDisplay* pCanvas, ScanDocument& 
     }
 }
 
+void CScanViewCommand::DrawSection(IADAddOnCanvasDisplay* pCanvas, ScanDocument& scan)
+{
+    const ScanDocument::Section& section = scan.section;
+    if (!section.havePlane)
+        return;
+    const double unit = scan.MillimetresPerUnit();
+    const scancore::SectionFrame& frame = section.frame;
+    using scancore::Vec2;
+    auto world = [&](const Vec2& p) { return frame.ToWorld(p); };
+
+    // The plane: a square a little bigger than the scan, round the scan's centre.
+    const scancore::Box3& b = scan.bounds;
+    const double half = 0.6 * scancore::Length(b.high - b.low);
+    const Vec2 middle = frame.ToPlane(b.Centre());
+    const __int64 planeSegment = AddSegment(pCanvas, L"Section plane", 245, 200, 40, true);
+    DrawPolyline(pCanvas, planeSegment,
+                 { world({ middle.x - half, middle.y - half }), world({ middle.x + half, middle.y - half }),
+                   world({ middle.x + half, middle.y + half }), world({ middle.x - half, middle.y + half }),
+                   world({ middle.x - half, middle.y - half }) },
+                 unit);
+
+    // The slice, thin red.
+    const __int64 sliceSegment = AddSegment(pCanvas, L"Section slice", 220, 50, 50, true);
+    for (const scancore::SlicePolyline& slice : section.result.slices)
+    {
+        std::vector<Point3> points = slice.points;
+        if (slice.closed && !points.empty())
+            points.push_back(points.front());
+        DrawPolyline(pCanvas, sliceSegment, points, unit);
+    }
+
+    // The fit, thicker green: arcs and circles drawn every 3 degrees.
+    const __int64 fitSegment = AddSegment(pCanvas, L"Section fit", 40, 190, 70, true);
+    pCanvas->SetLineWeight(fitSegment, 2.0f);
+    const double kPi = 3.14159265358979323846;
+    for (const scancore::Profile& profile : section.result.profiles)
+    {
+        for (const scancore::ProfileSegment& seg : profile.segments)
+        {
+            std::vector<Point3> points;
+            if (seg.kind == scancore::ProfileSegment::Kind::Line)
+            {
+                points = { world(seg.start), world(seg.end) };
+            }
+            else
+            {
+                double from = 0.0, sweep = 2.0 * kPi;
+                if (seg.kind == scancore::ProfileSegment::Kind::Arc)
+                {
+                    from = std::atan2(seg.start.y - seg.centre.y, seg.start.x - seg.centre.x);
+                    const double to = std::atan2(seg.end.y - seg.centre.y, seg.end.x - seg.centre.x);
+                    sweep = to - from;
+                    if (seg.anticlockwise && sweep < 0.0)
+                        sweep += 2.0 * kPi;
+                    else if (!seg.anticlockwise && sweep > 0.0)
+                        sweep -= 2.0 * kPi;
+                }
+                const int steps = (std::max)(2, static_cast<int>(std::ceil(std::fabs(sweep) / (3.0 * kPi / 180.0))));
+                for (int k = 0; k <= steps; ++k)
+                {
+                    const double a = from + sweep * k / steps;
+                    points.push_back(world({ seg.centre.x + seg.radius * std::cos(a),
+                                             seg.centre.y + seg.radius * std::sin(a) }));
+                }
+            }
+            DrawPolyline(pCanvas, fitSegment, points, unit);
+        }
+    }
+}
+
+void CScanViewCommand::ReadSectionPlane(ScanDocument& scan)
+{
+    IADSessionPtr session = theApp.m_pRoot->GetSessions()->GetItem(_variant_t(m_sessionId.c_str()));
+    IADPointPtr clicked;
+    IObjectCollectorPtr selected = session->SelectedObjectsEx(&clicked);
+    const long count = (selected != nullptr) ? selected->GetCount() : 0;
+    if (count == 0)
+        return;
+    IDispatchPtr item = selected->GetItem(_variant_t(0L));
+    IADTargetProxyPtr proxy = item;
+    IDispatchPtr target = (proxy != nullptr) ? proxy->GetTarget() : item;
+    const double unit = scan.MillimetresPerUnit();
+
+    ScanDocument::Section& section = scan.section;
+    Point3 point, normal;
+    std::string name;
+    bool face = false;
+    if (IADDesignPlanePtr plane = target)
+    {
+        IADPointPtr p1, p2, p3;
+        plane->GetGeometry(&p1, &p2, &p3);
+        IADVectorPtr n = plane->GetNormal();
+        if (p1 == nullptr || n == nullptr)
+            return;
+        point = Point3{ p1->GetX(), p1->GetY(), p1->GetZ() } * unit;
+        normal = { n->GetX(), n->GetY(), n->GetZ() };
+        name = static_cast<const char*>(_bstr_t(plane->GetName()));
+    }
+    else if (IADFacePtr alibreFace = target)
+    {
+        IADSurfacePtr surface = alibreFace->GetGeometry();
+        IADPlanePtr plane = surface;
+        if (plane == nullptr)
+        {
+            Log(L"[section] the selected face isn't flat");
+            SectionViewChanged();
+            return;
+        }
+        IADPointPtr root = plane->GetRootPoint();
+        IADVectorPtr n = plane->GetNormal();
+        if (root == nullptr || n == nullptr)
+            return;
+        point = Point3{ root->GetX(), root->GetY(), root->GetZ() } * unit;
+        normal = { n->GetX(), n->GetY(), n->GetZ() };
+        // Outward from the part, so a positive offset goes out of it (unproven).
+        if (alibreFace->GetIsSenseReversed() != VARIANT_FALSE)
+            normal = normal * -1.0;
+        name = "a flat face";
+        face = true;
+    }
+    else
+    {
+        // What it is, by its type information's name, to learn what Alibre sends.
+        std::wstring typeName = L"unknown";
+        ITypeInfo* pInfo = nullptr;
+        if (target != nullptr && SUCCEEDED(target->GetTypeInfo(0, LOCALE_USER_DEFAULT, &pInfo)) && pInfo != nullptr)
+        {
+            BSTR name = nullptr;
+            if (SUCCEEDED(pInfo->GetDocumentation(MEMBERID_NIL, &name, nullptr, nullptr, nullptr)) && name != nullptr)
+            {
+                typeName = name;
+                SysFreeString(name);
+            }
+            pInfo->Release();
+        }
+        Log(L"[section] Alibre's selection isn't a design plane or a face (proxy %d, %ld selected, type %s)",
+            proxy != nullptr ? 1 : 0, count, typeName.c_str());
+        return;
+    }
+    section.havePlane = true;
+    section.planeName = name;
+    section.point = point;
+    section.normal = scancore::Normalised(normal);
+    section.alibrePlane = target;
+    section.alibreFace = face;
+    scan.chosen = -1;
+    const auto start = std::chrono::steady_clock::now();
+    scan.UpdateSection();
+    Log(L"[section] %S: point (%.3f, %.3f, %.3f) mm, normal (%.4f, %.4f, %.4f); %zu polylines, %zu points, "
+        L"largest deviation %.4f mm, %.0f ms",
+        name.c_str(), point.x, point.y, point.z, section.normal.x, section.normal.y, section.normal.z,
+        section.result.profiles.size(), section.result.slicePoints, section.result.largestDeviation,
+        Milliseconds(start));
+    SectionViewChanged();
+    if (m_site != nullptr)
+        m_site->InvalidateCanvas();
+}
+
 STDMETHODIMP CScanViewCommand::OnSelectionChange()
 {
     AFX_MANAGE_STATE(AfxGetStaticModuleState());
 
     ScanDocument* pScan = FindScan(m_sessionId);
+    if (pScan != nullptr && pScan->sectioning && pScan->clickMode == ScanDocument::ClickMode::Target &&
+        theApp.m_pRoot != nullptr)
+    {
+        try
+        {
+            ReadSectionPlane(*pScan);
+        }
+        catch (const _com_error& error)
+        {
+            Log(L"[section] reading Alibre's selection failed: hr=0x%08X", static_cast<unsigned>(error.Error()));
+        }
+        return S_OK;
+    }
     if (pScan == nullptr || !pScan->orienting || pScan->clickMode != ScanDocument::ClickMode::Target ||
         theApp.m_pRoot == nullptr)
         return S_OK;

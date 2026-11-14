@@ -41,7 +41,20 @@ The ScanToAlibre ribbon tab's buttons are the steps, in order:
 
 Only one of the workflow's dialogs is open at a time (Frank's rule): opening one closes another. Then **Show Scan** (draws the scan again after a native command ended the view) and **About**. Later steps (fitting, sections, surfaces) follow as further buttons.
 
-## Workflow after Orient
+## Building the part (Frank's decisions, 14 November 2026)
+
+- **Alibre makes the solid features.** ScanToAlibre makes sketches and reference geometry from the scan; Frank extrudes, revolves and drills with Alibre's own commands, which stay fully editable. ScanToAlibre may show measured depths, but doesn't make features.
+- **A ribbon button for each action**, after 1 Load, 2 Refine and 3 Orient.
+- **First: 4 Section**, a modeless step dialog:
+  1. Choose the plane: push **Plane** and click an Alibre design plane or flat face, or push **Scan** and click one of the scan's box or fitted planes (which gets an Alibre design plane made for it, as a sketch needs Alibre geometry). An offset (mm) moves the section along the normal (for an Alibre plane or face, a design plane is made at the offset). There's no Flip: which way the sketch faces is Alibre's, and Extrude can go either way.
+  2. The scan is sliced by the plane into polylines (closed loops and open runs), drawn over the scan as soon as the plane or offset changes.
+  3. Each polyline is fitted with lines and arcs within a tolerance (default 0.05 mm), joined end to end, drawn over the slice with the largest deviation shown.
+  4. Design intent, each a check box: lines within 2 degrees of the sketch's horizontal or vertical made so, joins within 3 degrees made tangent, arcs with centres within the tolerance made concentric, and arc and circle sizes rounded (0.1 mm default, 0.01, or off).
+  5. **Create Sketch:** an Alibre sketch on the plane with the fitted lines and arcs (ends joined), the design intent as Alibre constraints and the rounded sizes as dimensions, **and the original slice as reference geometry** (construction lines along it, simplified to 0.01 mm), so the fit can be judged against the scan.
+  6. The scan's extent along the plane's normal is shown as a suggested depth for Alibre's Extrude.
+- Later buttons: Reference Geometry (the scan's fitted planes, axes and points as Alibre design geometry), Hole (from a fitted hole axis), Compare (the scan coloured by its distance from the part), Freeform Surface (a fitted B-spline patch inserted to extrude up to).
+
+## Workflow after Orient (the earlier outline)
 
 1. **Fit primitives:** the user clicks a seed point; region growing and a least-squares fit give a plane, cylinder, cone, sphere or torus, shown with a deviation colour map. Snap to design intent: round values, and parallel, perpendicular or coaxial to features already found.
 2. **Sections to sketches:** put a plane through the scan, slice it into a polyline, fit lines and arcs (with tangency), constrain, and create a sketch, then extrude or revolve it. This covers most mechanical parts.

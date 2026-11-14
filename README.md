@@ -8,6 +8,8 @@ Status: early. The add-on gets its own **ScanToAlibre** ribbon tab, whose button
 2. **Refine** decimates the scan to fewer triangles and smooths it (Laplacian, Taubin or Bilateral), in a dialog that stays open while you work. Changes apply straight away; Undo takes them back.
 3. **Orient** moves, rotates and scales the scan, fits planes to flat areas, and lines it up with the part's planes, axes and origin in 3-2-1 steps, using a box fitted to the scan with its centre planes and axes.
 
+4. **Section** slices the scan with an Alibre plane or face, or one of the scan's planes, fits lines and arcs to the slice, and makes an Alibre sketch of them, constrained (horizontal, vertical, tangent, concentric) with rounded radii, and the slice itself as construction lines. Extrude or revolve it with Alibre's own commands.
+
 Then **Show Scan**, which shows the scan again after another command has ended the scan view, and **About**.
 
 See `docs\SPEC.md` for the plan.

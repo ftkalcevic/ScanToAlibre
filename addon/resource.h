@@ -55,14 +55,29 @@
 #define IDC_OR_SELECT_CYLINDER          13060
 #define IDC_OR_FIT_AXIS                 13061
 #define IDC_OR_AXIS_PLANE               13062
+#define IDD_SECTION                     13070
+#define IDC_SEC_INFO                    13071
+#define IDC_SEC_PICK_ALIBRE             13072
+#define IDC_SEC_PICK_SCAN               13073
+#define IDC_SEC_PLANE                   13074
+#define IDC_SEC_OFFSET                  13075
+#define IDC_SEC_TOLERANCE               13076
+#define IDC_SEC_HV                      13077
+#define IDC_SEC_TANGENT                 13078
+#define IDC_SEC_CONCENTRIC              13079
+#define IDC_SEC_ROUND                   13080
+#define IDC_SEC_RESULT                  13081
+#define IDC_SEC_DEPTH                   13082
+#define IDC_SEC_STATUS                  13083
+#define IDC_SEC_CREATE                  13084
 
 // Next default values for new objects
 //
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        13070
+#define _APS_NEXT_RESOURCE_VALUE        13090
 #define _APS_NEXT_COMMAND_VALUE         32771
-#define _APS_NEXT_CONTROL_VALUE         13070
-#define _APS_NEXT_SYMED_VALUE           13070
+#define _APS_NEXT_CONTROL_VALUE         13090
+#define _APS_NEXT_SYMED_VALUE           13090
 #endif
 #endif

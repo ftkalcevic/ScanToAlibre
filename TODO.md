@@ -12,7 +12,7 @@
 - Prove in Alibre: extruding up to an inserted surface from the add-on (`AD_TO_GEOMETRY`), creating a sketch and extrude.
 - Scan import (STL, PLY, OBJ, XYZ), cleaning and display.
 - Primitive fitting with deviation maps and design-intent snapping.
-- Section to sketch, then extrude or revolve.
+- Section to sketch: test in Alibre (built and installed); then extrude or revolve from it.
 - Holes, fillets and chamfers.
 - Freeform B-spline surface fitting and insertion.
 - Lofts and sweeps through fitted sections.

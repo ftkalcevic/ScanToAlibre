@@ -72,6 +72,7 @@
     <ClCompile Include="MeshTests.cpp" />
     <ClCompile Include="OrientTests.cpp" />
     <ClCompile Include="ReconstructTests.cpp" />
+    <ClCompile Include="SectionTests.cpp" />
     <ClCompile Include="RefineTests.cpp" />
     <ClCompile Include="ScanCoreTests.cpp" />
     <ClCompile Include="ScanFileTests.cpp" />

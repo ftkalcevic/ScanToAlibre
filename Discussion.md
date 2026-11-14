@@ -1383,3 +1383,316 @@ Decisions are also recorded in the spec (`docs\SPEC.md`) and `CLAUDE.md`.
 ### 🧑 Frank · 09:16
 
 > It is fine with holes.
+
+### 🤖 Claude
+
+> Good, the holes stay. Meshing a point cloud leaves holes open wherever the scanner saw nothing.
+>
+> I've added that to ScanToAlibre's spec, marked point-cloud meshing as tested in its CLAUDE.md, and taken the item off TODO.md. Both `Discussion.md` files are rebuilt. Nothing is committed.
+>
+> The main item left on the list is the first modelling tool: sections through the scan turned into sketches to extrude or revolve. Smaller items include estimating normals for clouds that lack them, Refine's extras (filling holes, removing loose pieces and spikes), and an icon of ScanToAlibre's own.
+
+### 🧑 Frank · 09:16
+
+> lets start thinking about what tools and workflow we will provide to start building an alibre part
+
+### 🤖 Claude
+
+> This is a design question, so I'll check what we can build on first. There's an `MCPForAlibre` project beside ScanToAlibre, and this session's Alibre tools (create sketch, sketch figures, constraints, dimensions, extrude, revolve, hole) suggest it already drives part creation through the 27.0.1 API. Checking what it has proven:
+
+> Questions:
+> - Who should make the solid features (extrude, revolve, holes)?
+>   - Alibre, from our sketches (Recommended): ScanToAlibre makes sketches and reference geometry (design planes, axes, points) from the scan; you make the features with Alibre's own Extrude, Revolve and Hole, which stay fully editable and show their previews. ScanToAlibre measures depths for you (shown in the dialog) but doesn't make the feature.
+>   - ScanToAlibre makes them too: Buttons such as Extrude from Scan and Revolve from Scan create the feature directly, with depths and angles measured from the scan. Faster, but every option Alibre's own dialogs offer would need building.
+>   - Both: Sketches and reference geometry first; feature buttons for the common cases (extrude to the scan's extent, a hole from a fitted cylinder) later.
+> - Which tool should come first?
+>   - Section to sketch (Recommended): Choose a plane (Alibre's or a fitted one, at an offset), slice the scan, fit lines and arcs to the slice, and send them to an Alibre sketch on that plane. Covers most prismatic and turned parts (extrude or revolve the sketch).
+>   - Reference geometry to Alibre: Send fitted planes, axes and points (and the box's) to the part as Alibre design planes, axes and points, to sketch on and extrude to. Small, and useful with any later tool.
+>   - Holes from cylinders: A fitted hole (axis and diameter) becomes an Alibre hole on the face it's in, at the measured depth.
+>   - Deviation map: Colour the scan by how far it is from the Alibre part as you build it, to see what's still missing or off.
+> - How much design intent should a section's sketch carry?
+>   - Constrained, rounded (Recommended): Lines and arcs fitted to the slice, then snapped: near-horizontal or vertical made so, tangent joins kept tangent, arcs concentric where they nearly are, and dimensions rounded (to 0.1 mm or a choice), with Alibre constraints and dimensions added so the sketch is editable.
+>   - Fitted geometry only: The fitted lines and arcs as they are, no constraints or dimensions. Simplest; you constrain in Alibre.
+>   - A choice per sketch: A dialog setting for snapping and rounding (off, snap only, snap and dimension).
+> - Where should the part-building tools live?
+>   - 4 Sketch on the ribbon (Recommended): The next workflow step after Orient: a modeless dialog (one at a time, like Refine and Orient) for sections and reference geometry, with later steps (5 Features, 6 Compare) added as they're built.
+>   - Inside Orient: More tabs or groups in the Orient dialog, keeping fitting and building together.
+
+### 🧑 Frank · 09:22
+
+> Answers:
+> - Who should make the solid features (extrude, revolve, holes)?
+>   **Alibre, from our sketches (Recommended)**
+> - Which tool should come first?
+>   **Section to sketch (Recommended)**
+> - How much design intent should a section's sketch carry?
+>   **#1, but the original cross section should be shown as a reference geometry**
+> - Where should the part-building tools live?
+>   **The should be buttons for each action**
+
+### 🤖 Claude
+
+> Plan:
+>
+> # ScanToAlibre: building the Alibre part (first tool: Section to sketch)
+>
+> ## Context
+>
+> ScanToAlibre can load a scan (STL, PLY meshes and point clouds), refine it (decimate, smooth), and orient it (fitted box, planes and cylinder axes, 3-2-1 alignment to Alibre's planes and axes), all saved inside the part. The next stage is building the real Alibre part from the oriented scan. Frank's decisions (14 November 2026):
+>
+> - **Alibre makes the solid features.** ScanToAlibre makes sketches and reference geometry from the scan; Frank extrudes, revolves and drills with Alibre's own commands, which stay fully editable. ScanToAlibre can show measured depths, but doesn't make features.
+> - **First tool: section to sketch.** Slice the scan with a plane, fit lines and arcs, and send them to an Alibre sketch on that plane.
+> - **Sketches carry design intent:** constrained and rounded (near-horizontal or vertical made so, tangent joins tangent, near-concentric arcs concentric, dimensions rounded), **and the original cross-section goes into the sketch as reference geometry**, so the fit can be judged against the scan.
+> - **A ribbon button for each action**, after 1 Load, 2 Refine, 3 Orient. Section is the first; later ones (reference geometry, holes, compare) get their own buttons.
+>
+> ## What's already proven to build on
+>
+> - MCPForAlibre (`D:\Projects\alibre\MCPForAlibre`, C#, same 27.0.1 API) has proven, from an add-on: sketches on design planes and faces; lines, arcs, circles, splines, construction lines; horizontal, collinear and symmetric constraints; linear and diametric dimensions; design planes (offset, angle, 3 points), axes and points; extrude, revolve, holes. Its `CLAUDE.md` lists the traps: angles in radians; constraints, dimensions and `Analyze` need `BeginChange`/`EndChange`; construction figures and line end points have no ID; sketch constraints refuse design axes and points (bring them in as fixed construction geometry); holes need a face sketch. Port the patterns from its `Commands.*.cs` to C++.
+> - ScanToAlibre: the scan, fitted planes and axes (`ScanDocument::fitted`, `core\Orient` `Feature`), the step-dialog pattern (`addon\StepDialog`, one at a time), push-down click modes (`ScanDocument::ClickMode`), picking Alibre's selection (`OnSelectionChange`), and drawing overlays in the scan view (`DrawOrient`).
+> - CAMForAlibre's `core\ArcFit` (`FitArcs`: least-squares circles through a run's ends, within a tolerance, doubling then binary search) and `core\Boundary` (paths with arcs): port for fitting lines and arcs to a slice.
+>
+> ## Section (ribbon button 4 Section, a modeless step dialog)
+>
+> 1. **Choose the plane:** push **Plane**, then click an Alibre design plane or a flat face (Alibre's selection), or push **Scan** and click one of the scan's box or fitted planes (those get an Alibre design plane made for them, named after the fitted plane, since a sketch needs Alibre geometry). An **Offset** (mm) moves the section along the normal; **Flip** turns the sketch's normal.
+> 2. **Slice:** the scan is cut by the plane into polylines (`SliceMesh` in a new `core\Section`: triangle-plane crossings chained into closed loops and open runs), drawn in the view over the scan as soon as the plane or offset changes.
+> 3. **Fit:** each polyline becomes lines and arcs within a **Tolerance** (mm, default 0.05): Douglas-Peucker to lines, then arcs fitted over runs (ported `ArcFit`), joined end to end. Drawn over the slice in a second colour, with the largest deviation shown.
+> 4. **Snap and round** (design intent, each a check box): lines within 2 degrees of the sketch's horizontal or vertical made so; joins within 3 degrees made tangent; arcs whose centres are within the tolerance made concentric; arc and circle sizes rounded to a **Round to** step (0.1 mm default, 0.01, or off).
+> 5. **Create Sketch:** a new Alibre sketch on the plane: the fitted lines and arcs with coincident ends, the snapping as Alibre constraints (horizontal, vertical, tangent, concentric) and the rounded sizes as dimensions, inside `BeginChange`/`EndChange`. **The original slice is added as reference geometry:** construction lines along the slice, simplified to 0.01 mm so there are hundreds, not thousands. The sketch's 2D frame comes from `IADSketch::MapFromSketchToWorld` on its origin and unit points (unproven), so the scan's world coordinates land in the right place.
+> 6. Frank then extrudes or revolves the sketch with Alibre's own commands. The dialog shows the scan's extent along the plane's normal (from the section to the scan's far side) as a suggested depth.
+>
+> Core, all in `core\` with tests (no Alibre): `SliceMesh`, `FitProfile` (lines and arcs, tolerance, joined), `SnapProfile` (horizontal, vertical, tangent, concentric, rounding; reports which constraints to add), and the reference simplification. Add-on: `addon\SectionDialog` (step dialog), the Section ribbon button (next menu ID after Orient), a `SketchWriter` that makes the Alibre sketch, figures, constraints and dimensions, and drawing the slice and fit in `ScanViewCommand`.
+>
+> ## Later buttons (not in this step)
+>
+> - **Reference Geometry:** send the scan's fitted planes, axes and points to the part as Alibre design planes, axes and points.
+> - **Hole:** a fitted hole axis and diameter becomes an Alibre hole on the face it's in (needs a face sketch).
+> - **Compare:** colour the scan by its distance from the Alibre part (`GetFacetData`), to see what's missing.
+> - **Freeform surface:** fit a B-spline patch to a region and insert it (`DesignSurfaces.InsertFromFile`, proven) to extrude up to.
+>
+> ## To prove early in Alibre
+>
+> - `AddSketch` on a design plane made from a fitted plane, and the sketch frame from `MapFromSketchToWorld`.
+> - Construction lines in bulk (hundreds) in one sketch: speed and whether Alibre stays responsive.
+> - Tangent and concentric constraints, and radius dimensions, from C++ (MCPForAlibre proved horizontal, collinear, symmetric, linear and diametric).
+>
+> ## Verification
+>
+> - Core tests: slices of a box, a cylinder and a turned profile at known planes give the expected loops; `FitProfile` on sampled lines and arcs gives back the lines and arcs within the tolerance; snapping makes the expected constraints and rounded sizes; reference simplification stays within 0.01 mm.
+> - In Alibre (Frank): section the popsicle scan through its middle on ZX, create the sketch, check the fitted profile against the construction slice, and revolve or extrude it with Alibre's commands; check the dimensions came out rounded and the constraints hold.
+> - The log records each slice, fit (segments, largest deviation) and sketch (figures, constraints, dimensions, time).
+
+*(Frank approved the plan.)*
+
+### 🤖 Claude
+
+> Now the core: `core\Section`, with slicing, fitting, constraint finding, rounding and simplification.
+
+> Now I'll add junction refinement (so a line doesn't run past a tangent point into the arc) and merging of the loop's first and last segments when they're one piece.
+
+> Section core is written. Next I'm writing its tests.
+
+> The fitter's structure is right; I'm tuning where lines meet arcs so tangent joins come out tangent.
+
+> Nearly there: one of eight noisy joins misses tangency. Checking which.
+
+> All pass. Now: remove the debug prints, use the least-squares centres and radii for concentric and rounding too, add a non-tangent line-to-arc case and a timing on a real scan.
+
+> Slicing and fitting take milliseconds on the popsicle scan. One odd result: the slice through the X middle came back empty, so I'm checking that.
+
+> Correct result: the scan has no material at the X middle (a separate tab sits at x = -28), so there's nothing to slice there. Removing the debug line, then updating the docs.
+
+> The core of 4 Section is built. It's tested on its own, without Alibre: all 63 core tests pass. Nothing has been added to Alibre yet, so there's nothing for you to test there.
+>
+> New file: `core\Section.h/.cpp`.
+>
+> - **Slicing:** `SliceMesh` cuts the scan with a plane and joins the cuts into closed loops and open runs.
+> - **Fitting:** `FitProfile` turns each loop or run into lines and arcs within the tolerance (0.05 mm by default), joined end to end. A loop that's round all the way comes out as one circle.
+> - **Joins:** at first a line ran a little way into the arc after it, which tilted the arc. Each join now moves to where its two pieces fit best, so in the tests a turned shoulder comes out as a line, a 3.000 mm arc and a line, meeting exactly where they should.
+> - **Design intent:** `FindConstraints` finds the following, each one on or off:
+>   - lines within 2° of horizontal or vertical;
+>   - joins within 3° of tangent;
+>   - arcs whose centres are within 0.05 mm, made concentric;
+>   - radii rounded to 0.1 mm.
+> - **Tangency on noisy scans:** the joins can only be placed within the noise (about 0.4 mm). That tilted the arcs' ends by up to 3°, so one of eight tangent joins in the noisy test was missed. Tangency is now judged from a best-fit line and circle (is the line one radius from the arc's centre?), which doesn't depend on where the join falls.
+> - **Reference slice:** `SimplifyPolyline` cuts the raw slice down to the fewest points that stay within 0.01 mm. That's what will go into the sketch as construction lines.
+>
+> **On the popsicle scan:** each slice and fit takes a few milliseconds. The ZX section through the middle gave 17 pieces and 16 constraints, and its reference slice dropped from 337 points to 30. The YZ section through the middle is empty because the scan has no material there (a separate tab sits at x = −28), so you'll need to pick the plane or offset carefully in the dialog.
+>
+> **Still to build:**
+> - the Section dialog;
+> - the 4 Section ribbon button;
+> - writing the Alibre sketch.
+>
+> None of the sketch calls have been proven yet: making a sketch on a plane, getting its frame, tangent and concentric constraints, and radius dimensions. Whether Alibre stays responsive with hundreds of construction lines is also unknown.
+>
+> I've updated `CLAUDE.md`, `TODO.md` and both `Discussion.md` files.
+
+### 🧑 Frank · 09:37
+
+> Yes, build it
+
+### 🤖 Claude
+
+> I'm reading MCPForAlibre's proven sketch code to port its patterns to C++.
+
+> Still gathering the exact Alibre sketch API signatures from the 27.0.1 headers before writing the sketch writer.
+
+> I have what I need from MCPForAlibre (including the proven `MapFromWorldToSketch`). Now looking at how the ribbon buttons are wired.
+
+> Now writing: first a core `SectionMesh` (slice, fit, reference, reach in one call), then the add-on pieces.
+
+> Now the sketch writer.
+
+> Now the Section dialog.
+
+> Now the resources, the ribbon button and the view's drawing and picking.
+
+> Windows' `max` macro; wrapping it.
+
+> Everything builds. Running the tests and checking whether Alibre is open before installing.
+
+> Installed (the installed DLL matches the build). Now the docs.
+
+> 4 Section is built and installed, but none of it has run in Alibre yet. All 64 core tests pass. Restart Alibre to pick up the new add-on.
+>
+> **What's new:**
+> - **4 Section button** on the ScanToAlibre ribbon, after 3 Orient. It's greyed until the part has a scan.
+> - **Section to Sketch dialog** (`addon\SectionDialog`):
+>   - **Choosing the plane:** push **Alibre Plane** and click a design plane or a flat face, or push **Scan Plane** and click one of the scan's box or fitted planes.
+>   - **Offset:** moves the section along the plane's normal.
+>   - **Tolerance:** 0.05 mm by default. It also sets how close arc centres must be to count as concentric.
+>   - **Check boxes:** horizontal and vertical, tangent, and concentric, each on or off, plus **Round radii to** 0.1 mm, 0.01 mm or off.
+>   - **Counts:** how many lines, arcs and circles, how closely they follow the slice, and how far the scan reaches either side of the plane (a guide for the extrude depth).
+> - **Preview in the view:** the plane in yellow, the raw slice in red and the fitted lines and arcs in green. It updates whenever you change the plane, offset or settings.
+> - **Create Sketch** (`addon\SketchWriter`):
+>   - It adds a sketch named "Scan Section n" on the plane. For an offset, or for a scan plane, it first makes a design plane to sketch on.
+>   - It reads the sketch's own axes back from Alibre and refits in them, so horizontal and vertical are the sketch's.
+>   - In the sketch: the fitted figures with their ends joined, the constraints, the rounded radii as dimensions, and the slice itself as construction lines.
+>
+> **Changes from the plan:**
+> - I left out **Flip**. Alibre decides which way a sketch faces, and Extrude can go either way anyway. The spec now says so.
+> - The tolerance doubles as the concentric distance. The spec already said "within the tolerance".
+>
+> **Unproven (watch `[section]` in the log):**
+> - Every sketch call from C++.
+> - Making a design plane through three plain points; if Alibre refuses, it falls back to three design points, which will appear in the part.
+> - Which way Alibre's plane offset goes. The code checks and remakes the plane the other way if it's wrong.
+> - Whether a face's normal points out of the part.
+> - Whether ends drawn at the same point are already joined. If they are, some "coincident" constraints may be counted as refused.
+> - Speed with hundreds of construction lines.
+>
+> **To test:**
+> 1. Open the popsicle part with its scan and click **4 Section**. The dialog should open.
+> 2. Push **Scan Plane** and click a box plane. The yellow outline, red slice and green fit should appear, and the counts should fill in.
+> 3. Change the Offset and Tolerance and tick and untick the check boxes. The drawing and counts should follow.
+> 4. Push **Alibre Plane** and click the ZX plane, then a flat face of a part if there is one.
+> 5. Click **Create Sketch**. Check:
+>    - the sketch is on the right plane;
+>    - the green fit lines up with the construction lines;
+>    - horizontal, vertical and tangent constraints appear;
+>    - radii are rounded;
+>    - the status line's counts, and whether anything was refused.
+> 6. Try a non-zero offset on an Alibre plane: the new design plane should be on the side the offset says.
+> 7. Try a scan plane: see whether a design plane alone is made, or three design points too.
+> 8. Extrude or revolve the sketch with Alibre's own command.
+>
+> If anything fails, I'll start with the `[section]` lines in `%LOCALAPPDATA%\ScanToAlibre\ScanToAlibre.log`. There's still no help page for ScanToAlibre. I've updated `CLAUDE.md`, `docs\SPEC.md`, `TODO.md`, `README.md` and both `Discussion.md` files.
+
+### 🧑 Frank · 09:53
+
+> That worked
+
+### 🤖 Claude
+
+> The log also shows seven clicks where Alibre's selection was neither a design plane nor a face. I'll log what it actually was, so we can see.
+
+> Alibre Design is closed, so I'll install the fix.
+
+> Installed. Recording what Frank's run proved, then rebuilding the discussions.
+
+> Good. Your run proved the main sketch calls work from C++, but the log shows the sketch didn't get its constraints. I've fixed that and installed it, but it hasn't been tested yet.
+>
+> **What your run proved:**
+> - Making a sketch on a design plane works (`Plane<1>`).
+> - Reading the sketch's own axes back from Alibre works, and the scan was sliced exactly on the sketch's plane.
+> - Lines, arcs, a circle and 133 construction lines went in, in 0.66 s.
+>
+> **What went wrong:** the sketch got **0 constraints and 0 dimensions**, and Alibre refused none. That means the constraint step never found the figures it had just added. My guess is that Alibre doesn't give a figure its ID until the edit is finished, so the IDs I saved were empty.
+>
+> **The fix:** each fitted piece now keeps the figure Alibre returned, the IDs are read again after the edit, and the figure itself is used if there's still no ID. The log will now say whether the IDs were empty during and after the edit, and how many lookups failed. Alibre was closed, so I installed it.
+>
+> **Two other things from the log:**
+> - Seven of your clicks while picking a plane came through as something that's neither a design plane nor a face, so nothing happened. The log now records what type it actually was.
+> - Slicing on "Plane 1", a plane fitted to a flat area of the scan, gave 882 scraps. The cut runs right along that flat surface, so put in a small offset (say 0.5 mm) to slice through the part instead.
+>
+> **To test:**
+> 1. Make a section sketch on a design plane again. The status line should now show constraints and dimensions.
+> 2. In the sketch, check the ends are joined, the horizontal, vertical and tangent constraints are there, and the radii are rounded dimensions.
+> 3. Check whether the status line says Alibre refused any constraints. The likeliest refusals are for ends that were already joined.
+> 4. Try Alibre Plane on a flat face of the part. If it isn't taken, I'll check the log for what type Alibre sent.
+> 5. Try a scan plane with an offset, and see whether Alibre makes just a design plane or three design points as well.
+>
+> I've recorded what's proven in `CLAUDE.md` and rebuilt both `Discussion.md` files.
+
+### 🧑 Frank · 09:56
+
+> <local-command-stdout>Compacted </local-command-stdout>
+
+> There is an issue with selecting planes.  I can't click through the wireframe of the plane in front to get to the planes in the background.
+
+### 🤖 Claude
+
+> Your usage limit has been reached, so I only got part of this fix done.
+>
+> **The likely cause:** our own drawings in the view count when Alibre works out what you clicked. The yellow section-plane square sits in front of Alibre's planes and catches the click. That probably also explains the seven earlier clicks that came through as neither a plane nor a face.
+>
+> **What's changed:** in [ScanViewCommand.cpp](../ScanToAlibre/addon/ScanViewCommand.cpp), `DrawSection` no longer draws the yellow square while **Alibre Plane** is pushed down. The red slice and green fit are still drawn. The square comes back when you press Alibre Plane again to release it, or switch to Scan Plane.
+>
+> **Not done:**
+> - Not built, installed or tested.
+> - Line endings not checked: the file needs to stay CRLF.
+> - `CLAUDE.md` not updated, and `BuildDiscussion.py` not run in either repository.
+>
+> **To test, once it's built and installed (with Alibre closed):**
+> 1. Push Alibre Plane and click a design plane that sits behind another one. It should be picked.
+> 2. If clicks still get caught, look at the `[section]` log line for the type Alibre sent. The red slice and green fit lines might also be in the way, or it might be Alibre's own plane wireframe, which we can't change.
+
+### 🧑 Frank · 12:40
+
+> The problem was with the scan geometry.  I can't select a scan plane that is behind another scan plane, and embedded in the scan
+
+### 🤖 Claude
+
+> Frank says the earlier square change wasn't the problem, so I'll put the square back. Then I'll build.
+
+> The build succeeded. I'll check that Alibre is closed before installing.
+
+> The administrator prompt was cancelled, so the add-on isn't installed. Next I'll update `CLAUDE.md` and rebuild the discussions.
+
+> You can now pick a scan plane that's behind another one or inside the scan. It's built, but the administrator prompt was cancelled, so it isn't installed and hasn't been tried in Alibre.
+>
+> **The cause:** a click went to the nearest plane whose square contained the clicked point. A plane further back or inside the scan always lost to the one in front.
+>
+> **How picking works now:**
+> - **By its lines first:** a plane's outline and cross count like an axis. The nearest drawn line within 8 pixels of the click wins, whatever is in front of it.
+> - **Inside the square second:** if no line is that close, the click goes to the nearest plane whose square it's in, as before. Clicking again in the same spot moves to the next plane behind it, and then wraps back to the front.
+>
+> This applies to Scan Plane in Section and to Scan in Orient, in [ScanViewCommand.cpp](../ScanToAlibre/addon/ScanViewCommand.cpp). I put the yellow section square back to how it was. I've also noted this in `CLAUDE.md` and rebuilt both `Discussion.md` files.
+>
+> To install, close Alibre, run this and accept the administrator prompt:
+>
+> ```bash
+> powershell -ExecutionPolicy Bypass -File D:\Projects\alibre\ScanToAlibre\deploy\install.ps1
+> ```
+>
+> **To test:**
+> 1. In Section, push Scan Plane and click the outline or cross of a plane that sits behind another. It should be picked.
+> 2. Click a plane that's inside the scan by its lines.
+> 3. Click repeatedly in one spot where several planes overlap. Each click should take the next plane behind, then go back to the front one.
+> 4. In Orient, check that axes and the centre marker still pick as before.
+
+### 🧑 Frank · 12:57
+
+> <local-command-stdout>Compacted </local-command-stdout>
+
+> test passed.

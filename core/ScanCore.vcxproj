@@ -70,6 +70,7 @@
     <ClCompile Include="Orient.cpp" />
     <ClCompile Include="Ply.cpp" />
     <ClCompile Include="Reconstruct.cpp" />
+    <ClCompile Include="Section.cpp" />
     <ClCompile Include="ScanData.cpp" />
     <ClCompile Include="ScanFile.cpp" />
     <ClCompile Include="Smooth.cpp" />
@@ -85,6 +86,7 @@
     <ClInclude Include="Orient.h" />
     <ClInclude Include="Ply.h" />
     <ClInclude Include="Reconstruct.h" />
+    <ClInclude Include="Section.h" />
     <ClInclude Include="ScanData.h" />
     <ClInclude Include="ScanFile.h" />
     <ClInclude Include="Smooth.h" />

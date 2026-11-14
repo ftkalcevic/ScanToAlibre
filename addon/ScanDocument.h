@@ -17,6 +17,7 @@
 
 #include "Mesh.h"
 #include "Orient.h"
+#include "Section.h"
 
 struct ScanDocument
 {
@@ -55,6 +56,29 @@ struct ScanDocument
     int chosen = -1;                            // in Features(), or -1
     bool haveTarget = false;                    // Alibre geometry clicked in the view
     scancore::Feature target;                   // in mm
+
+    // Section (4 Section): while its dialog is open the view draws the plane,
+    // the slice and its fitted lines and arcs. Scan down: a click chooses one of
+    // the scan's planes; Target down: Alibre's design plane or flat face.
+    struct Section
+    {
+        bool havePlane = false;
+        std::string planeName;                  // UTF-8
+        scancore::Point3 point, normal;         // the chosen plane in mm, before the offset
+        IDispatchPtr alibrePlane;               // Alibre's design plane or face; null for a scan plane
+        bool alibreFace = false;
+        double offset = 0.0;                    // mm along the normal
+        double tolerance = 0.05;                // mm
+        scancore::SnapOptions snap;
+        scancore::SectionFrame frame;           // a guess at the sketch's axes, for the preview
+        scancore::SectionResult result;
+        std::vector<scancore::ProfileConstraint> constraints;
+        int sketches = 0;                       // made so far, for names
+    };
+    bool sectioning = false;
+    Section section;
+    // Slices and fits again (after the plane, offset, tolerance or scan changes).
+    void UpdateSection();
 
     // The box's centre planes, axes and centre, then the fitted planes and axes.
     std::vector<scancore::Feature> Features() const;
@@ -132,3 +156,7 @@ const size_t kUndoSteps = 5;
 
 // The largest number of triangles drawn when not at full detail.
 const size_t kDisplayTriangles = 300000;
+
+// How closely the reference slice (construction lines in the sketch) follows
+// the scan, in mm.
+const double kReferenceTolerance = 0.01;

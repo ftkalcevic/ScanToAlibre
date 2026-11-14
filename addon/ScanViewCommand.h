@@ -52,10 +52,16 @@ private:
     // Returns true if the click hit the scan.
     bool Pick(ScanDocument& scan, long x, long y);
     // Orient: choose the box's or a fitted plane, axis or centre; or grow a flat area.
+    // Section: choose the box's or a fitted plane.
     bool PickFeature(ScanDocument& scan, long x, long y);
     bool GrowAt(ScanDocument& scan, long x, long y);
     bool FitView(const ScanDocument& scan, scancore::ViewProjection& view);
-    void DrawOrient(IADAddOnCanvasDisplay* pCanvas, ScanDocument& scan);
+    // planesOnly: just the box and the planes, for choosing a section's plane.
+    void DrawOrient(IADAddOnCanvasDisplay* pCanvas, ScanDocument& scan, bool planesOnly);
+    // Section: the plane's outline, the slice and its fitted lines and arcs.
+    void DrawSection(IADAddOnCanvasDisplay* pCanvas, ScanDocument& scan);
+    // Section: Alibre's selected design plane or flat face becomes the plane.
+    void ReadSectionPlane(ScanDocument& scan);
     void ProbeScreenToWorld(long x, long y);
 
     std::wstring m_sessionId;

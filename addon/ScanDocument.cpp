@@ -146,6 +146,20 @@ void ScanDocument::SetSelection(std::vector<int> triangles)
     selectionArrays.reset();
 }
 
+void ScanDocument::UpdateSection()
+{
+    if (!section.havePlane)
+    {
+        section.result = scancore::SectionResult();
+        section.constraints.clear();
+        return;
+    }
+    const scancore::Point3 origin = section.point + section.normal * section.offset;
+    section.frame = scancore::FrameForPlane(origin, section.normal);
+    section.result = scancore::SectionMesh(mesh, section.frame, section.tolerance, kReferenceTolerance);
+    section.constraints = scancore::FindConstraints(section.result.profiles, section.snap);
+}
+
 std::vector<scancore::Feature> ScanDocument::Features() const
 {
     std::vector<scancore::Feature> features = scancore::BoxFeatures(box);

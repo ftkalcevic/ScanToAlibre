@@ -10,6 +10,7 @@
 #include "ScanData.h"
 #include "RefineDialog.h"
 #include "OrientDialog.h"
+#include "SectionDialog.h"
 #include "ScanDisplayCommand.h"
 #include "SurfaceTest.h"
 #include "Log.h"
@@ -124,7 +125,7 @@ STDMETHODIMP CAddOnInterface::SubMenuItems(long menuID, SAFEARRAY** pSubMenuIDs)
 
     // The workflow, in order, then Show Scan and About. Insert Test Surface proved
     // surface insertion and is left off (SurfaceTest still has it).
-    const long children[] = { MENU_ID_LOAD, MENU_ID_REFINE, MENU_ID_ORIENT, MENU_ID_SHOW_SCAN, MENU_ID_ABOUT };
+    const long children[] = { MENU_ID_LOAD, MENU_ID_REFINE, MENU_ID_ORIENT, MENU_ID_SECTION, MENU_ID_SHOW_SCAN, MENU_ID_ABOUT };
     const ULONG count = static_cast<ULONG>(sizeof(children) / sizeof(children[0]));
 
     // The caller takes ownership of the array.
@@ -159,6 +160,7 @@ STDMETHODIMP CAddOnInterface::MenuItemText(long menuID, BSTR* pMenuDisplayText)
     case MENU_ID_LOAD:         *pMenuDisplayText = _bstr_t(L"1 Load").Detach(); break;
     case MENU_ID_REFINE:          *pMenuDisplayText = _bstr_t(L"2 Refine").Detach(); break;
     case MENU_ID_ORIENT:       *pMenuDisplayText = _bstr_t(L"3 Orient").Detach(); break;
+    case MENU_ID_SECTION:      *pMenuDisplayText = _bstr_t(L"4 Section").Detach(); break;
     case MENU_ID_SHOW_SCAN:    *pMenuDisplayText = _bstr_t(L"Show Scan").Detach(); break;
     case MENU_ID_TEST_SURFACE: *pMenuDisplayText = _bstr_t(L"Insert Test Surface").Detach(); break;
     case MENU_ID_ABOUT:  *pMenuDisplayText = _bstr_t(L"About").Detach();    break;
@@ -178,7 +180,7 @@ STDMETHODIMP CAddOnInterface::MenuItemState(long menuID, BSTR sessionIdentifier,
     // The root must be enabled too, or the whole drop-down/tab greys out.
     // The About box works in every workspace (including Home, which passes an
     // empty session id). The rest work on parts only, on a supported Alibre, and
-    // Refine, Orient and Show Scan once the part has a scan.
+    // Refine, Orient, Section and Show Scan once the part has a scan.
     const bool part = IsAlibreVersionSupported() && IsPartSession(sessionIdentifier);
     if (menuID == MENU_ID_ROOT || menuID == MENU_ID_ABOUT)
         *pType = ADDONMenuStates_ADDON_MENU_ENABLED;
@@ -187,7 +189,7 @@ STDMETHODIMP CAddOnInterface::MenuItemState(long menuID, BSTR sessionIdentifier,
     else if (menuID == MENU_ID_SHOW_SCAN && part && FindScan(sessionIdentifier) != nullptr)
         *pType = ScanDisplayOn(sessionIdentifier) ? ADDONMenuStates_ADDON_MENU_CHECKED
                                                   : ADDONMenuStates_ADDON_MENU_UNCHECKED;
-    else if ((menuID == MENU_ID_REFINE || menuID == MENU_ID_ORIENT) && part && FindScan(sessionIdentifier) != nullptr)
+    else if ((menuID == MENU_ID_REFINE || menuID == MENU_ID_ORIENT || menuID == MENU_ID_SECTION) && part && FindScan(sessionIdentifier) != nullptr)
         *pType = ADDONMenuStates_ADDON_MENU_ENABLED;
     else
         *pType = ADDONMenuStates_ADDON_MENU_GRAYED;
@@ -219,6 +221,11 @@ STDMETHODIMP CAddOnInterface::MenuItemToolTip(long menuID, BSTR* pToolTip)
     case MENU_ID_ORIENT:
         *pToolTip = _bstr_t(L"Step 3: orient the scan: move, rotate and scale it, fit planes to flat areas, and "
                             L"line it up with the part's planes, axes and origin in 3-2-1 steps.").Detach();
+        break;
+    case MENU_ID_SECTION:
+        *pToolTip = _bstr_t(L"Step 4: slice the scan with a plane, fit lines and arcs to the slice, and make an "
+                            L"Alibre sketch of them, constrained and with rounded radii, with the slice itself as "
+                            L"construction lines. Then extrude or revolve it with Alibre's own commands.").Detach();
         break;
     case MENU_ID_SHOW_SCAN:
         *pToolTip = _bstr_t(L"Show this part's scan, and keep it showing through other commands such as Measure. "
@@ -299,6 +306,17 @@ STDMETHODIMP CAddOnInterface::InvokeCommand(long menuID, BSTR sessionIdentifier,
             return S_OK;
         // The view starts after the dialog, so it draws the orient geometry from the start.
         COrientDlg* pDialog = new COrientDlg(sessionId);
+        pDialog->Open();
+        return StartScanView(sessionIdentifier, pCommand);
+    }
+
+    if (menuID == MENU_ID_SECTION)
+    {
+        const std::wstring sessionId = (sessionIdentifier != nullptr) ? sessionIdentifier : L"";
+        if (!IsAlibreVersionSupported() || !IsPartSession(sessionIdentifier) || FindScan(sessionId) == nullptr)
+            return S_OK;
+        // The view starts after the dialog, so it draws the section from the start.
+        CSectionDlg* pDialog = new CSectionDlg(sessionId);
         pDialog->Open();
         return StartScanView(sessionIdentifier, pCommand);
     }
@@ -541,7 +559,7 @@ STDMETHODIMP CAddOnInterface::MenuIcon(long menuID, BSTR* pMenuIconPath)
 
     if (menuID != MENU_ID_ROOT && menuID != MENU_ID_ABOUT && menuID != MENU_ID_TEST_SURFACE &&
         menuID != MENU_ID_LOAD && menuID != MENU_ID_SHOW_SCAN &&
-        menuID != MENU_ID_REFINE && menuID != MENU_ID_ORIENT)
+        menuID != MENU_ID_REFINE && menuID != MENU_ID_ORIENT && menuID != MENU_ID_SECTION)
         return S_OK;
 
     // The icon is deployed beside the DLL. Resolve it from our own module,
