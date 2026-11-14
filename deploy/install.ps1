@@ -3,7 +3,7 @@
     Installs the ScanToAlibre add-on into Alibre Design.
 
 .DESCRIPTION
-    1. Copies ScanToAlibre.dll, ScanToAlibre.adc, ScanToAlibre.ico and ShowScan.ico from the build output to
+    1. Copies ScanToAlibre.dll, ScanToAlibre.adc, ScanToAlibre.ico and the button images (ShowScan.ico and the others) from the build output, and the help page from help\, to
        %ProgramData%\Alibre AddOns\ScanToAlibre\
     2. Registers the add-on under HKLM\SOFTWARE\Alibre Design Add-Ons
        (value name = add-on GUID, data = install folder).
@@ -39,7 +39,8 @@ try {
     # --- Locate build output --------------------------------------------------
     $projectDir = Split-Path -Parent $PSScriptRoot
     $buildDir   = Join-Path $projectDir "bin\x64\$Configuration"
-    $files      = @("$AddOnName.dll", "$AddOnName.adc", "$AddOnName.ico", "ShowScan.ico")
+    $files      = @("$AddOnName.dll", "$AddOnName.adc", "$AddOnName.ico", "ShowScan.ico",
+                    "Load.ico", "Refine.ico", "Orient.ico", "Section.ico", "SectionSeries.ico", "Surface.ico", "Silhouette.ico", "Compare.ico", "Help.ico")
 
     foreach ($f in $files) {
         if (-not (Test-Path (Join-Path $buildDir $f))) {
@@ -61,6 +62,13 @@ try {
     $pdb = Join-Path $buildDir "$AddOnName.pdb"
     if (Test-Path $pdb) { Copy-Item -Path $pdb -Destination $targetDir -Force }
     Write-Host "Copied add-on files to $targetDir"
+
+    # --- Help ------------------------------------------------------------------
+    # The help page, opened from the ? buttons and the ribbon's Help, goes in a help folder beside the add-on.
+    $helpDir = Join-Path $targetDir 'help'
+    New-Item -ItemType Directory -Path $helpDir -Force | Out-Null
+    Copy-Item -Path (Join-Path $projectDir 'help\*') -Destination $helpDir -Recurse -Force
+    Write-Host "Copied help to $helpDir"
 
     # --- Register --------------------------------------------------------------
     # Use the .NET API: New-Item -Force on HKLM:\SOFTWARE fails even when elevated.

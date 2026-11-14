@@ -111,6 +111,7 @@
     <ClCompile Include="ScanDisplayCommand.cpp" />
     <ClCompile Include="OrientDialog.cpp" />
     <ClCompile Include="CompareDialog.cpp" />
+    <ClCompile Include="Help.cpp" />
     <ClCompile Include="SectionDialog.cpp" />
     <ClCompile Include="SectionSeriesDialog.cpp" />
     <ClCompile Include="SurfaceDialog.cpp" />
@@ -135,6 +136,7 @@
     <ClInclude Include="ScanDisplayCommand.h" />
     <ClInclude Include="OrientDialog.h" />
     <ClInclude Include="CompareDialog.h" />
+    <ClInclude Include="Help.h" />
     <ClInclude Include="SectionDialog.h" />
     <ClInclude Include="SectionSeriesDialog.h" />
     <ClInclude Include="SurfaceDialog.h" />
@@ -158,6 +160,15 @@
   <ItemGroup>
     <Image Include="res\ScanToAlibre.ico" />
     <Image Include="res\ShowScan.ico" />
+    <Image Include="res\Load.ico" />
+    <Image Include="res\Refine.ico" />
+    <Image Include="res\Orient.ico" />
+    <Image Include="res\Section.ico" />
+    <Image Include="res\SectionSeries.ico" />
+    <Image Include="res\Surface.ico" />
+    <Image Include="res\Silhouette.ico" />
+    <Image Include="res\Compare.ico" />
+    <Image Include="res\Help.ico" />
   </ItemGroup>
   <ItemGroup>
     <None Include="ScanToAlibre.def" />
@@ -178,7 +189,7 @@
 
   <!-- Put the .adc and .ico beside the DLL so the output folder is a complete add-on. -->
   <Target Name="CopyAddOnFiles" AfterTargets="Build">
-    <Copy SourceFiles="$(ProjectDir)ScanToAlibre.adc;$(ProjectDir)res\ScanToAlibre.ico;$(ProjectDir)res\ShowScan.ico"
+    <Copy SourceFiles="$(ProjectDir)ScanToAlibre.adc;$(ProjectDir)res\ScanToAlibre.ico;$(ProjectDir)res\ShowScan.ico;$(ProjectDir)res\Load.ico;$(ProjectDir)res\Refine.ico;$(ProjectDir)res\Orient.ico;$(ProjectDir)res\Section.ico;$(ProjectDir)res\SectionSeries.ico;$(ProjectDir)res\Surface.ico;$(ProjectDir)res\Silhouette.ico;$(ProjectDir)res\Compare.ico;$(ProjectDir)res\Help.ico"
           DestinationFolder="$(OutDir)"
           SkipUnchangedFiles="true" />
   </Target>

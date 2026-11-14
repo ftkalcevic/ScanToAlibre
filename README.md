@@ -1,3 +1,5 @@
+![Made by AI / LLM, human reviewed](docs/made-by-ai.png)
+
 # ScanToAlibre: Alibre Design add-on (C++/MFC)
 
 An add-on for Alibre Design that helps turn a 3D scan (an STL mesh or a point cloud) into an editable Alibre part. You pick out features on the scan (planes, cylinders, sections), and it creates Alibre sketches and features from them. Freeform areas get fitted B-spline surfaces inserted into the part.
@@ -27,6 +29,8 @@ It targets Alibre Design 27.0.1 and follows the layout of CAMForAlibre:
 | `tests\` | `ScanCoreTests.exe`, which runs without Alibre |
 | `third_party\` | Copies of external libraries, with their licences |
 | `deploy\` | Install and uninstall scripts |
+| `help\` | The help page, `ScanToAlibre.html`, installed beside the add-on and opened by Help and the dialogs' ? buttons |
+| `tools\` | `MakeRibbonIcons.py` draws the ribbon images; `BuildDiscussion.py` rebuilds `Discussion.md` |
 
 The log is `%LOCALAPPDATA%\ScanToAlibre\ScanToAlibre.log`.
 

@@ -1,0 +1,574 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ScanToAlibre Help</title>
+<style>
+  :root {
+    --bg: #ffffff; --text: #1d1d1f; --muted: #5f6368; --rule: #dadce0;
+    --accent: #0b5cd5; --panel: #f6f7f9; --code: #eef0f3;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1b1c1e; --text: #e6e6e6; --muted: #a0a4a8; --rule: #3a3c40;
+      --accent: #7fb0ff; --panel: #242528; --code: #2c2e32;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-padding-top: 12px; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.55 "Segoe UI", system-ui, sans-serif;
+    display: grid; grid-template-columns: 250px minmax(0, 1fr);
+  }
+  nav {
+    position: sticky; top: 0; height: 100vh; overflow-y: auto;
+    padding: 20px 16px; background: var(--panel); border-right: 1px solid var(--rule);
+    font-size: 14px;
+  }
+  nav h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 18px 0 6px; }
+  nav h2:first-child { margin-top: 0; }
+  nav a { display: block; padding: 2px 0; color: var(--text); text-decoration: none; }
+  nav a:hover { color: var(--accent); }
+  nav .sub { padding-left: 12px; }
+  main { padding: 24px 40px 80px; max-width: 900px; }
+  h1 { font-size: 28px; margin: 0 0 4px; }
+  section { border-top: 1px solid var(--rule); padding-top: 18px; margin-top: 28px; }
+  section:target > h2 { color: var(--accent); }
+  h2 { font-size: 22px; margin: 0 0 8px; }
+  h3 { font-size: 16px; margin: 20px 0 6px; }
+  p { margin: 6px 0 10px; }
+  dl { margin: 6px 0 12px; }
+  dt { font-weight: 600; margin-top: 10px; }
+  dd { margin: 2px 0 0 18px; }
+  .muted { color: var(--muted); }
+  .tbc { color: var(--muted); font-style: italic; }
+  code { background: var(--code); padding: 1px 4px; border-radius: 3px; font-size: 13px; }
+  @media (max-width: 760px) {
+    body { display: block; }
+    nav { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--rule); }
+    main { padding: 16px; }
+  }
+</style>
+</head>
+<body>
+<nav>
+  <h2>ScanToAlibre</h2>
+  <a href="#top">Overview</a>
+  <a href="#workflows">Example workflows</a>
+  <a class="sub" href="#wf-machined">A machined part</a>
+  <a class="sub" href="#wf-symmetric">A symmetric part</a>
+  <a class="sub" href="#wf-organic">An organic shape</a>
+  <a class="sub" href="#wf-freeform">A freeform top</a>
+  <a class="sub" href="#wf-check">Checking the part</a>
+  <h2>Ribbon</h2>
+  <a href="#ribbon">The ScanToAlibre tab</a>
+  <a href="#show-scan">Show Scan</a>
+  <a class="sub" href="#scan-tab">Scan tab</a>
+  <a href="#load">Load</a>
+  <a class="sub" href="#scan-view">The scan in the view</a>
+  <h2>Dialogs</h2>
+  <a href="#refine">Refine</a>
+  <a href="#orient">Orient</a>
+  <a href="#section">Section</a>
+  <a href="#section-series">Section Series</a>
+  <a href="#surface">Surface</a>
+  <a href="#silhouette">Silhouette</a>
+  <a href="#compare">Compare</a>
+  <a href="#about">About</a>
+</nav>
+<main>
+
+<h1 id="top">ScanToAlibre Help</h1>
+<p class="muted">ScanToAlibre add-on for Alibre Design 27.0.1 and later.</p>
+
+<section id="overview">
+<h2>Overview</h2>
+<p>ScanToAlibre helps you turn a 3D scan into a real, editable Alibre part. You load the scan into a part,
+clean it up, line it up with the part's planes, and then take what you need from it:
+sketches of sections and outlines, lofts through a series of sections, and fitted B-spline surfaces.</p>
+<p>ScanToAlibre doesn't make solid features itself. It makes sketches, design planes, lofts and surfaces,
+and you build the part from them with Alibre's own Extrude, Revolve, Hole and so on, so everything stays
+fully editable. When the part is built, Compare colours the scan by how far it is from the part.</p>
+<p>The ScanToAlibre ribbon tab is the workflow, left to right:</p>
+<ol>
+  <li><b><a href="#load">Load</a></b> a scan (STL or PLY) into a part.</li>
+  <li><b><a href="#refine">Refine</a></b> it: fewer triangles, and a smoother surface.</li>
+  <li><b><a href="#orient">Orient</a></b> it: move, turn and scale it, fit planes and axes to it, and line it up
+      with the part's planes, axes and origin.</li>
+  <li>Take the shape from it: <b><a href="#section">Section</a></b> (a slice as a sketch),
+      <b><a href="#section-series">Section Series</a></b> (many slices and a loft),
+      <b><a href="#surface">Surface</a></b> (a fitted surface) and
+      <b><a href="#silhouette">Silhouette</a></b> (an outline as a sketch).</li>
+  <li><b><a href="#compare">Compare</a></b> the part you built with the scan.</li>
+</ol>
+<p>The scan is saved inside the part (<code>.AD_PRT</code>) when you save the part, with the planes and
+axes you fitted to it. Only one ScanToAlibre dialog is open at a time: opening one closes another. Each
+dialog applies its changes straight away, so closing it loses nothing. Every dialog's <b>?</b> button opens
+its own section of this page.</p>
+<p>All lengths are in millimetres and angles in degrees, whatever the part's units.</p>
+</section>
+
+<section id="workflows">
+<h2>Example workflows</h2>
+
+<h3 id="wf-machined">A machined part</h3>
+<ol>
+  <li>Open a new part and push <b>Load</b>. Choose the scan's <code>.stl</code> or <code>.ply</code> file.</li>
+  <li>Push <b>Refine</b>. If the scan is large, <b>Decimate</b> it to 50% or so with Largest change ticked
+      (0.05 mm). <b>Smooth</b> it with Bilateral, which keeps sharp edges. Close the dialog.</li>
+  <li>Push <b>Orient</b>. Push <b>Select Area</b> and click the part's flat base, then <b>Fit Plane</b>.
+      Do the same for a flat side, and <b>Select Cylinder</b> and <b>Fit Axis</b> for a hole.</li>
+  <li>In <b>Align (3-2-1)</b>: push <b>Scan</b> and click the base plane, push <b>To</b> and click Alibre's
+      XY-Plane, then push <b>Align</b>. Line up the side with the ZX-Plane, then the hole's axis with an
+      Alibre axis or the origin, the same way. The dialog says what's still free to move after each step.</li>
+  <li>Push <b>Section</b>. Push <b>Alibre Plane</b> and click the XY-Plane, and set an <b>Offset</b> to a
+      height where the slice shows the profile you want. Check the fit in green over the slice in red,
+      then push <b>Create Sketch</b>.</li>
+  <li>Extrude the sketch with Alibre's Extrude. The Section dialog shows the scan's depth along the plane as
+      a suggestion.</li>
+  <li>If there are tabs or flanges a slice at one height misses, use <b>Silhouette</b> for the outline seen
+      from above instead.</li>
+  <li>Push <b>Compare</b> to see where the part still differs from the scan.</li>
+</ol>
+
+<h3 id="wf-symmetric">A symmetric part</h3>
+<ol>
+  <li>Load, Refine and Orient as above. In Orient, push <b>Find Symmetry</b>: it adds "Symmetry plane 1".</li>
+  <li>Align the symmetry plane to Alibre's YZ-Plane (Scan, click the plane; To, click YZ-Plane; Align).</li>
+  <li>In <b>Section</b> or <b>Silhouette</b>, tick <b>Symmetric about a symmetry plane square to this one</b>.
+      The sketch comes out exactly symmetric, with a construction line on the symmetry line and Alibre's
+      Symmetric constraints about it.</li>
+  <li>In <b>Surface</b>, push <b>Detect</b> to tick the world planes the scan is symmetric about, so the
+      surface is mirrored exactly.</li>
+</ol>
+
+<h3 id="wf-organic">An organic shape</h3>
+<ol>
+  <li>Load, Refine and Orient so the shape's length runs along an Alibre axis.</li>
+  <li>Push <b>Section Series</b>. Pick a plane square to the length (an Alibre plane, or one of the scan's
+      box planes). The list fills with 10 planes from end to end.</li>
+  <li>Leave <b>Create Loft</b>, <b>Fit Spline</b> and <b>Create Guide Curves</b> ticked, and push
+      <b>Create Loft</b>. ScanToAlibre makes a sketch at each plane and a loft boss through them.</li>
+  <li>If it warns that two neighbouring sections don't overlap, delete the smaller one from the list or add
+      planes between them, so the shape changes slowly from one to the next.</li>
+</ol>
+
+<h3 id="wf-freeform">A freeform top</h3>
+<ol>
+  <li>Load, Refine and Orient so the freeform face looks up along Z.</li>
+  <li>Push <b>Surface</b>. Push <b>Smooth Area</b> and click the freeform face; add any missed areas with
+      <b>Brush</b>. Check the green grid follows the scan and the deviations are small.</li>
+  <li>Push <b>Create Surface</b>. It's inserted into the part as a design surface.</li>
+  <li>Make the outline with <b>Silhouette</b> on the XY-Plane, then extrude it with Alibre's Extrude
+      <b>To Geometry</b>, choosing the surface.</li>
+</ol>
+
+<h3 id="wf-check">Checking the part</h3>
+<ol>
+  <li>With the part built (or partly built), push <b>Compare</b>.</li>
+  <li>Green is within the <b>Tolerance</b>; blues are scan inside the part (too much part), yellow to red
+      scan outside it (too little), and grey isn't modelled yet.</li>
+  <li>Push <b>Probe</b> and click the scan to read the distance at a point.</li>
+  <li>After changing the part, close Compare and open it again: the part is read when it opens.</li>
+</ol>
+</section>
+
+<section id="ribbon">
+<h2>The ScanToAlibre tab</h2>
+<p>The ScanToAlibre ribbon tab holds, in order:</p>
+<dl>
+  <dt>Show Scan</dt><dd>Shows or hides the part's scan. See <a href="#show-scan">Show Scan</a>.</dd>
+  <dt>Load</dt><dd>Reads a scan into the part. See <a href="#load">Load</a>.</dd>
+  <dt>Refine, Orient, Section, Section Series, Surface, Silhouette, Compare</dt>
+  <dd>Open their dialogs, described below.</dd>
+  <dt>Help</dt><dd>Opens this page at the top, in your web browser.</dd>
+  <dt>About</dt><dd>Shows the add-on's version. See <a href="#about">About</a>.</dd>
+</dl>
+<p>Load works in parts. Show Scan and the dialogs need the part to have a scan, and are greyed until it
+does. Help and About work everywhere.</p>
+</section>
+
+<section id="show-scan">
+<h2>Show Scan</h2>
+<p>A toggle. On, the scan stays drawn while you use Alibre's own commands, such as Measure, and a
+<b>Scan</b> tab appears in the Design Explorer. Off, the scan is drawn only while one of ScanToAlibre's
+dialogs is open. It's the one control for the scan: once you've turned it off, the scan stays hidden.</p>
+<p>When Show Scan is first turned on, Alibre may report one "Object reference not set to an instance of an
+object" error. Close the message; Alibre carries on.</p>
+
+<h3 id="scan-tab">Scan tab</h3>
+<p>The Scan tab holds a tree. Under <b>Scan Geometry</b> are the planes and axes fitted to the scan in
+<a href="#orient">Orient</a>.</p>
+<dl>
+  <dt>Click a plane or axis</dt><dd>Draws it in yellow over the model.</dd>
+  <dt>Rename (right-click, or F2)</dt><dd>Edits the name in place. A symmetry plane stays one when
+      renamed.</dd>
+  <dt>Delete (right-click, or the Delete key)</dt><dd>Removes it at once, with no prompt. Orient's Undo
+      brings it back.</dd>
+</dl>
+</section>
+
+<section id="load">
+<h2>Load</h2>
+<p>Asks for a scan file and reads it into the open part. If the part already has a scan, it asks before
+replacing it.</p>
+<dl>
+  <dt>STL</dt><dd>Binary or text.</dd>
+  <dt>PLY mesh</dt><dd>Text or binary, with faces.</dd>
+  <dt>PLY point cloud</dt><dd>Points with normals are made into a mesh as they load. Areas the scanner
+      didn't see stay open. A cloud without normals is refused.</dd>
+</dl>
+<p>The scan is saved inside the part when you save it. Alibre sees the part as changed after a Load (a
+parameter named <code>ScanToAlibre</code> counts the changes), so Save lights up.</p>
+
+<h3 id="scan-view">The scan in the view</h3>
+<p>The scan is drawn in light blue, hidden by the part's solid. Large scans are drawn simplified while you
+work.</p>
+<dl>
+  <dt>F</dt><dd>Switches between the simplified scan and full detail.</dd>
+  <dt>Left-click on the scan</dt><dd>Picks a point, marked with crosshairs (when no dialog is using
+      clicks).</dd>
+  <dt>C</dt><dd>Clears the picked points.</dd>
+</dl>
+<p>Alibre's own commands, such as Measure, stop ScanToAlibre's view, so the scan disappears until you
+reopen a dialog, unless <a href="#show-scan">Show Scan</a> is on.</p>
+</section>
+
+<section id="refine">
+<h2>Refine</h2>
+<p>Changes the scan's mesh straight away. Undo takes back up to five changes. The choices are remembered
+until Alibre closes.</p>
+<dl>
+  <dt>Scan</dt><dd>The scan's name and how many triangles it has now.</dd>
+</dl>
+<h3>Decimate: fewer triangles</h3>
+<p>Fewer triangles make everything faster. Decimating merges small triangles where the surface is flat
+(quadric edge collapse).</p>
+<dl>
+  <dt>Triangles</dt><dd>Decimate to this many triangles.</dd>
+  <dt>Percent of now</dt><dd>Decimate to this share of the triangles there are now (default 50%).</dd>
+  <dt>Largest change (mm)</dt><dd>When ticked, stops before the surface would move further than this
+      (default 0.05 mm), even if that leaves more triangles than asked for.</dd>
+  <dt>Keep open edges</dt><dd>Keeps the edges of holes and of the scan's borders where they are (default
+      on).</dd>
+  <dt>Decimate</dt><dd>Does it.</dd>
+</dl>
+<h3>Smooth</h3>
+<dl>
+  <dt>Method</dt><dd><b>Laplacian</b> is simple and shrinks the shape a little. <b>Taubin</b> keeps the
+      size. <b>Bilateral</b> (the default) keeps sharp edges, best for machined parts.</dd>
+  <dt>Passes</dt><dd>How many times to smooth (default 5). More passes smooth more.</dd>
+  <dt>Strength (0 to 1)</dt><dd>How far each pass moves the surface (default 0.5).</dd>
+  <dt>Keep open edges</dt><dd>Keeps the edges of holes and borders where they are (default on).</dd>
+  <dt>Smooth</dt><dd>Does it.</dd>
+</dl>
+<dl>
+  <dt>Status line</dt><dd>What the last change did and how long it took.</dd>
+  <dt>Undo</dt><dd>Takes back the last change: Refine's, or Orient's moves and fitted planes. Up to five.</dd>
+  <dt>Close</dt><dd>Closes the dialog. Changes are already made.</dd>
+</dl>
+</section>
+
+<section id="orient">
+<h2>Orient</h2>
+<p>Moves, turns and scales the scan, fits planes and axes to it, and lines it up with the part's own planes,
+axes and origin. While Orient is open, the scan's fitted box is drawn: its edges, its three centre planes
+(A along the longest direction in red, then B in green, C in blue), its axes and its centre. Fitted planes
+are orange, the chosen one yellow, and the selected area orange.</p>
+<p>Three buttons say what a click on the scan does: <b>Select Area</b> or <b>Select Cylinder</b> (grow a
+selection), <b>Scan</b> (choose a scan plane, axis or point) and <b>To</b> (choose Alibre geometry). They
+stay down until you push them again or push another; with none down, clicks go to Alibre.</p>
+<dl>
+  <dt>Scan</dt><dd>The scan's name and size.</dd>
+</dl>
+<h3>Move (mm)</h3>
+<dl>
+  <dt>X, Y, Z</dt><dd>How far to move the scan along each axis.</dd>
+  <dt>Move</dt><dd>Moves it. This starts the alignment over.</dd>
+  <dt>Centre on the Origin</dt><dd>Moves the fitted box's centre to the origin.</dd>
+</dl>
+<h3>Rotate</h3>
+<dl>
+  <dt>About</dt><dd>The axis to turn about: X, Y or Z.</dd>
+  <dt>by ... degrees</dt><dd>The angle to turn by.</dd>
+  <dt>through</dt><dd>Turn about the origin, or about the scan's centre.</dd>
+  <dt>Rotate</dt><dd>Turns it. This starts the alignment over.</dd>
+</dl>
+<h3>Scale</h3>
+<dl>
+  <dt>Factor</dt><dd>The same factor every way, such as 25.4 for a scan made in inches.</dd>
+  <dt>through</dt><dd>Scale about the origin, or about the scan's centre.</dd>
+  <dt>Scale</dt><dd>Scales it. This starts the alignment over.</dd>
+</dl>
+<h3>Fit a plane, an axis or a symmetry plane</h3>
+<dl>
+  <dt>Select Area</dt><dd>While down, a click on the scan selects the flat area round it, and a click on a
+      selected area takes it away.</dd>
+  <dt>Select Cylinder</dt><dd>While down, a click selects the cylinder round it, outside or a hole.</dd>
+  <dt>within ... degrees and ... mm</dt><dd>How far a triangle may tilt (default 10 degrees) and lie
+      (default 0.2 mm) from the area's fitted plane or cylinder and still join it.</dd>
+  <dt>Selected</dt><dd>How many triangles are selected.</dd>
+  <dt>Clear</dt><dd>Empties the selection.</dd>
+  <dt>Fit Plane</dt><dd>Adds a plane fitted to the selection, named Plane 1, Plane 2 and so on.</dd>
+  <dt>Fit Axis</dt><dd>Adds the selected cylinder's centre line, named Axis 1 and so on, with its diameter
+      and whether it's a hole.</dd>
+  <dt>Find Symmetry</dt><dd>Adds the scan's best plane of symmetry, "Symmetry plane n". Push it again for
+      the next best. It says "No symmetry found" when under 30% of the scan matches its mirror image.</dd>
+  <dt>Mid Plane</dt><dd>With a plane, axis or point chosen (Scan down), push Mid Plane and click a second of
+      the same kind. Adds the plane halfway between two planes, or square to the line joining two axes or
+      two points through its middle, named "Mid plane n".</dd>
+</dl>
+<h3>Align (3-2-1)</h3>
+<p>Lines the scan up with Alibre geometry one step at a time. Each step turns and slides the scan only in
+the ways earlier steps left free. A plane goes onto a plane, an axis onto an axis or a plane, and a point onto
+a point.</p>
+<dl>
+  <dt>Step line</dt><dd>What's still free to move or turn.</dd>
+  <dt>Scan</dt><dd>While down, a click chooses one of the scan's planes, axes or its centre. Click near a
+      plane's outline or cross to reach one behind another; clicking the chosen plane again takes the next
+      one behind.</dd>
+  <dt>Scan feature</dt><dd>The chosen plane, axis or point.</dd>
+  <dt>Delete</dt><dd>Removes the chosen fitted plane or axis (not the box's own).</dd>
+  <dt>Delete All</dt><dd>After asking, removes every fitted plane and axis, symmetry and mid planes too.
+      Undo brings them back.</dd>
+  <dt>To</dt><dd>While down, a click on an Alibre design plane, axis or point makes it the target.</dd>
+  <dt>Target</dt><dd>The chosen Alibre geometry.</dd>
+  <dt>Axis onto a plane</dt><dd>When an axis goes onto a plane: <b>square to it</b> or <b>lying in it</b>.</dd>
+  <dt>Flip</dt><dd>Turns the scan's plane or axis the other way round before aligning.</dd>
+  <dt>Start Over</dt><dd>Frees every direction again, keeping the scan where it is.</dd>
+  <dt>Align</dt><dd>Moves the scan to line the chosen feature up with the target. A step that would line up
+      nothing new is refused.</dd>
+</dl>
+<dl>
+  <dt>Status line</dt><dd>What the last action did.</dd>
+  <dt>Undo</dt><dd>Takes back moves, fitted planes and axes, deletions and Refine's changes, up to five.</dd>
+  <dt>Close</dt><dd>Closes the dialog. The scan, its fitted planes and axes are saved with the part; the
+      alignment's progress lasts until the part closes.</dd>
+</dl>
+</section>
+
+<section id="section">
+<h2>Section</h2>
+<p>Slices the scan with a plane, fits lines and arcs to the slice and makes an Alibre sketch of them. The
+plane is drawn yellow, the slice red and the fit green. You can pick another plane and make another sketch
+without closing the dialog.</p>
+<dl>
+  <dt>Scan</dt><dd>The scan's name and size.</dd>
+</dl>
+<h3>Plane</h3>
+<dl>
+  <dt>Alibre Plane</dt><dd>Push, then click an Alibre design plane or a flat face of the part. The button
+      comes up once a plane is chosen.</dd>
+  <dt>Scan Plane</dt><dd>Push, then click one of the scan's box or fitted planes. An Alibre design plane is
+      made for it when the sketch is created.</dd>
+  <dt>Plane</dt><dd>The chosen plane.</dd>
+  <dt>Offset</dt><dd>Moves the slice along the plane's normal (mm). With an offset, a design plane is made
+      there for the sketch. A plane lying on a flat area of the scan slices badly; offset it a little.</dd>
+</dl>
+<h3>Fit lines and arcs</h3>
+<dl>
+  <dt>Tolerance</dt><dd>How far the fitted lines and arcs may be from the slice (default 0.05 mm). Also the
+      distance within which arc centres count as concentric.</dd>
+  <dt>Horizontal and vertical</dt><dd>Lines within 2 degrees of the sketch's horizontal or vertical are made
+      so.</dd>
+  <dt>Tangent</dt><dd>Joins within 3 degrees of tangent are made tangent.</dd>
+  <dt>Concentric</dt><dd>Arcs whose centres are within the tolerance are made concentric.</dd>
+  <dt>Round radii to</dt><dd>Arc and circle sizes are rounded to 0.1 mm (default) or 0.01 mm and
+      dimensioned, or left as they are (Off).</dd>
+  <dt>Symmetric about a symmetry plane square to this one</dt><dd>Makes the fit exactly symmetric about the
+      first symmetry plane (from Find Symmetry or Mid Plane in Orient, or one Surface's Detect found) that's
+      square to the sketch plane. The result line says which plane and how far apart the two sides are.</dd>
+</dl>
+<h3>Sketch Options</h3>
+<dl>
+  <dt>Create Raw Sketch</dt><dd>Puts the slice itself in the sketch, as construction lines when the fitted
+      sketch is made too, otherwise as ordinary lines.</dd>
+  <dt>Create Fitted Sketch</dt><dd>Puts the fitted lines and arcs in the sketch with their constraints and
+      dimensions.</dd>
+  <dt>Fit arcs</dt><dd>Unticked, the fit uses lines only.</dd>
+</dl>
+<h3>Section</h3>
+<dl>
+  <dt>Result</dt><dd>How many loops and runs the slice has, how many lines and arcs fit them, and the largest
+      distance from the slice.</dd>
+  <dt>Depth</dt><dd>How far the scan reaches either side of the plane: a suggested depth for Alibre's
+      Extrude.</dd>
+  <dt>Status line</dt><dd>What the last action did.</dd>
+  <dt>Create Sketch</dt><dd>Makes the sketch, "Scan Section n", and clears Alibre's selection. Greyed when
+      neither sketch option is ticked.</dd>
+  <dt>Close</dt><dd>Closes the dialog.</dd>
+</dl>
+</section>
+
+<section id="section-series">
+<h2>Section Series</h2>
+<p>Slices the scan at a series of planes offset from one plane and makes a sketch at each, and with Create
+Loft, a loft through them. Every slice is drawn thin red, the chosen row's slice thicker with its fit in
+green, and the guide curves dark green.</p>
+<dl>
+  <dt>Scan</dt><dd>The scan's name and size.</dd>
+</dl>
+<h3>Plane</h3>
+<dl>
+  <dt>Pick Alibre Plane</dt><dd>Push, then click an Alibre design plane or flat face.</dd>
+  <dt>Pick Scan Plane</dt><dd>Push, then click one of the scan's box or fitted planes.</dd>
+  <dt>Plane</dt><dd>The chosen plane. Picking one fills the list again.</dd>
+</dl>
+<h3>Series</h3>
+<dl>
+  <dt>First, Last</dt><dd>The first and last offsets along the plane's normal (mm). They start at the scan's
+      extent less 2% at each end.</dd>
+  <dt>Count</dt><dd>How many planes (default 10).</dd>
+  <dt>Make</dt><dd>Fills the list with Count planes evenly from First to Last.</dd>
+  <dt>List</dt><dd>One row per plane: its offset, its number, its loops and what the fit makes. Double-click
+      a row or press F2 to edit its offset. Offsets must go up from row to row.</dd>
+  <dt>Add</dt><dd>Adds a plane halfway between the chosen row and the next.</dd>
+  <dt>Delete</dt><dd>Removes the chosen rows.</dd>
+</dl>
+<h3>Loft</h3>
+<dl>
+  <dt>Create Loft</dt><dd>Follows each closed loop from slice to slice and makes a loft boss through each
+      run of matching slices (default on). The result line names the runs.</dd>
+  <dt>Fit Spline</dt><dd>Each slice becomes a closed spline with the same number of points as the others,
+      starting at matching places (default).</dd>
+  <dt>Use lines and Arcs</dt><dd>Each slice is fitted with lines and arcs split so every slice has the same
+      pieces in the same places. A run that can't be matched falls back to splines, and says so.</dd>
+  <dt>Create Guide Curves</dt><dd>Adds 3D sketch splines through matching points of the slices, used as
+      the loft's guides (default on).</dd>
+</dl>
+<h3>Fit and Sketch Options</h3>
+<p>Tolerance, Horizontal and vertical, Tangent, Concentric, Round radii to, Create Raw Sketch, Create Fitted
+Sketch and Fit arcs work as in <a href="#section">Section</a>. Sections that are lofted get their ends joined
+but no other constraints or dimensions, so Alibre's solver can't move them.</p>
+<dl>
+  <dt>Result</dt><dd>The runs of matching slices and what each fit makes.</dd>
+  <dt>Status line</dt><dd>What the last action did.</dd>
+  <dt>Create Sketches / Create Loft</dt><dd>Makes a design plane and sketch, "Scan Series n.k", for each
+      plane, and with Create Loft the loft "Scan Series n loft r" for each run. If neighbouring sections
+      don't overlap, it warns and asks before lofting. If Alibre refuses the guides, the loft is made without
+      them.</dd>
+  <dt>Close</dt><dd>Closes the dialog.</dd>
+</dl>
+</section>
+
+<section id="surface">
+<h2>Surface</h2>
+<p>Fits a B-spline surface to areas of the scan and inserts it into the part as a design surface, to extrude
+up to with Alibre's own commands. The selection is drawn orange, the surface as a green grid and its edge
+yellow. It's fitted again whenever the selection or a choice changes.</p>
+<dl>
+  <dt>Scan</dt><dd>The scan's name and size.</dd>
+</dl>
+<h3>Select</h3>
+<dl>
+  <dt>Smooth Area</dt><dd>While down, a click takes the area round it over which neighbouring triangles bend
+      less than the Angle. Clicking a selected triangle takes its area away.</dd>
+  <dt>Brush</dt><dd>While down, a click takes the joined triangles within the Brush radius.</dd>
+  <dt>Clear</dt><dd>Empties the selection.</dd>
+  <dt>Angle</dt><dd>For Smooth Area (default 15 degrees).</dd>
+  <dt>Brush radius</dt><dd>For Brush (default 3 mm).</dd>
+  <dt>Selected</dt><dd>How many triangles are selected.</dd>
+</dl>
+<h3>Base plane</h3>
+<p>The surface is a height over this plane, so a selection that folds back over it is refused.</p>
+<dl>
+  <dt>Auto</dt><dd>The plane fitted to the selection (default), turned square to any ticked symmetry
+      planes.</dd>
+  <dt>XY, YZ, ZX</dt><dd>That world plane.</dd>
+</dl>
+<h3>Symmetry</h3>
+<dl>
+  <dt>XY, YZ, ZX</dt><dd>Mirrors the selection across that world plane, so the surface is exactly
+      symmetric. At most two; the base plane's own is greyed.</dd>
+  <dt>Detect</dt><dd>Scores the scan's symmetry about each world plane as it lies, and ticks those with at
+      least 80% matching (at most the best two). Align the scan's symmetry plane with a world plane in Orient
+      first.</dd>
+  <dt>Scores</dt><dd>Detect's score for each plane, such as "YZ: 94%".</dd>
+</dl>
+<h3>Surface perimeter</h3>
+<dl>
+  <dt>Use scan projection</dt><dd>Trims the surface to the whole scan's outline seen along the base plane's
+      normal, holes filled.</dd>
+  <dt>Use scan bounding rectangle</dt><dd>An untrimmed rectangle round that outline, plus 2%.</dd>
+  <dt>Use scan bounding box</dt><dd>An untrimmed rectangle round Orient's fitted box seen along the normal,
+      plus 2%.</dd>
+  <dt>Use selection</dt><dd>Trims the surface to the selection's outline (default).</dd>
+  <dt>Offset</dt><dd>Makes the perimeter bigger every way by this much (mm, default 0). The surface carries
+      on smoothly past the scan.</dd>
+</dl>
+<h3>Fit</h3>
+<dl>
+  <dt>Tolerance</dt><dd>Control points are added until 99% of the selection is within this (default
+      0.05 mm), at most 40 each way.</dd>
+  <dt>Smoothing</dt><dd>0 to 1 (default 0.2). Higher makes a smoother surface that follows the scan's noise
+      less.</dd>
+  <dt>Result</dt><dd>The control points each way, the share within the tolerance, and the largest and RMS
+      distances.</dd>
+  <dt>Status line</dt><dd>What the last action did.</dd>
+  <dt>Create Surface</dt><dd>Inserts the surface into the part as a design surface.</dd>
+  <dt>Close</dt><dd>Closes the dialog.</dd>
+</dl>
+</section>
+
+<section id="silhouette">
+<h2>Silhouette</h2>
+<p>Makes a sketch of the scan's outline seen along a plane's normal, with every separate piece and every
+through-hole. It catches tabs and flanges that a slice at one height misses. The dialog is Section's, with
+one more field.</p>
+<dl>
+  <dt>Scan</dt><dd>The scan's name and size.</dd>
+  <dt>Alibre Plane, Scan Plane, Offset</dt><dd>Choose the sketch plane, as in <a href="#section">Section</a>.
+      The offset moves the sketch plane; the outline is the same at any offset.</dd>
+  <dt>Tolerance, Horizontal and vertical, Tangent, Concentric, Round radii to, Symmetric</dt>
+  <dd>Fit the outline with lines and arcs, as in <a href="#section">Section</a>.</dd>
+  <dt>Smallest hole</dt><dd>Holes and pieces smaller than this across are left out (default 1 mm), such as
+      pinholes and gaps in the scan.</dd>
+  <dt>Create Raw Sketch, Create Fitted Sketch, Fit arcs</dt><dd>As in <a href="#section">Section</a>.</dd>
+  <dt>Result</dt><dd>How many loops the outline has, how many lines and arcs fit them, and the largest
+      distance.</dd>
+  <dt>Depth</dt><dd>The scan's extent along the normal: a suggested depth for Alibre's Extrude.</dd>
+  <dt>Status line</dt><dd>What the last action did.</dd>
+  <dt>Create Sketch</dt><dd>Makes the sketch, "Scan Silhouette n".</dd>
+  <dt>Close</dt><dd>Closes the dialog.</dd>
+</dl>
+</section>
+
+<section id="compare">
+<h2>Compare</h2>
+<p>Colours the scan by how far it is from the part as built so far. The part is read when the dialog opens;
+open it again after changing the part. With no solid yet, it says there's nothing to compare.</p>
+<dl>
+  <dt>Scan</dt><dd>The scan's name and size.</dd>
+</dl>
+<h3>Colours</h3>
+<dl>
+  <dt>Tolerance</dt><dd>Within this either way is green (default 0.1 mm).</dd>
+  <dt>Range</dt><dd>How far to look for the part (default 1 mm). Scan further than this from it is grey,
+      "not modelled". Widening the range searches again; the other changes only recolour.</dd>
+  <dt>Legend</dt><dd>The colours and their edges: dark blue, blue and light blue where the scan is inside the
+      part, green within the tolerance, yellow, orange and red where it's outside, and grey not compared.</dd>
+</dl>
+<h3>Statistics</h3>
+<dl>
+  <dt>Statistics</dt><dd>How many points were compared and what share, the largest distance outside and
+      inside, the RMS, and the share within the tolerance.</dd>
+  <dt>Probe</dt><dd>While down, a click on the scan shows the distance there, or "not modelled", and marks the
+      point.</dd>
+  <dt>Status</dt><dd>The probe's reading, or what the dialog is doing.</dd>
+  <dt>Close</dt><dd>Closes the dialog.</dd>
+</dl>
+</section>
+
+<section id="about">
+<h2>About</h2>
+<p>Shows ScanToAlibre's version and the version of Alibre Design it's running in.</p>
+<dl>
+  <dt>OK</dt><dd>Closes it.</dd>
+</dl>
+</section>
+
+</main>
+</body>
+</html>

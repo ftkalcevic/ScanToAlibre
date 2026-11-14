@@ -23,6 +23,7 @@ protected:
     void OnCancel() override;
     void OnOK() override;
     void PostNcDestroy() override;
+    afx_msg void OnHelpButton();
 
     UINT m_templateId;
     std::wstring m_sessionId;

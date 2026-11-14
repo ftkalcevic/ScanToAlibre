@@ -13,6 +13,7 @@ public:
 
 protected:
     BOOL OnInitDialog() override;
+    afx_msg void OnHelpButton();
 
     DECLARE_MESSAGE_MAP()
 };

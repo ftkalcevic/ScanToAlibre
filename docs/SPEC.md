@@ -25,7 +25,9 @@ From `AlibreX_64.tlh` and `AlibreAddOn_64.tlh`, all unproven:
 
 ## The ribbon is the workflow (Frank's decision, 11 November 2026)
 
-The ScanToAlibre ribbon tab's buttons are the steps, in order. They carry no numbers (Frank's decision, 14 November 2026): Show Scan, Load, Refine, Orient, Section, Section Series, Surface, Silhouette, Compare, About.
+The ScanToAlibre ribbon tab's buttons are the steps, in order. They carry no numbers (Frank's decision, 14 November 2026): Show Scan, Load, Refine, Orient, Section, Section Series, Surface, Silhouette, Compare, Help, About.
+
+**Help** (Frank's request, 15 November 2026): an HTML page installed beside the add-on (`help\ScanToAlibre.html`) and opened in the default browser. The ribbon's Help button opens it at the top, an overview and some example workflows; each dialog's small ? button opens it at that dialog's section.
 
 1. **Load:** reads a scan into the part: STL, and PLY (meshes, and point clouds with normals, which are made into a mesh when loaded; Frank chose that over drawing points as small discs). The mesh is made by a signed distance from the points' tangent planes (Hoppe et al. 1992, Gaussian weighted) on a grid as fine as the points' spacing (coarser for very large clouds), drawn through by surface nets; the surface reaches across gaps between a scanner's lines of points but not past the scan's edges or into holes, so areas the scanner didn't see stay open (Frank is fine with the holes). A cloud without normals is refused for now. The scan is saved inside the part, in the `.AD_PRT`, through Alibre's add-on data stream (Frank chose that over a file beside the part). Loading into a part that has a scan asks before replacing it.
 2. **Refine** (Frank asked for a better name than Fix): a modeless dialog that changes the scan straight away, with Undo (up to five changes back).

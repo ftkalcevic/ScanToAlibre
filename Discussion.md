@@ -4527,3 +4527,124 @@ Decisions are also recorded in the spec (`docs\SPEC.md`) and `CLAUDE.md`.
 ### 🧑 Frank · 06:30
 
 > Works
+
+### 🤖 Claude
+
+> Good, the warning works. CLAUDE.md now records it as tested.
+>
+> Two Section Series things still haven't been tested in Alibre:
+> - Use lines and Arcs with Create Loft. It should now write the sections with only their ends joined (no rounded radii) and make the loft.
+> - Editing an offset in the list in place (double-click or F2).
+>
+> Symmetric isn't applied to Section Series yet. Nothing is committed.
+
+### 🧑 Frank · 06:32
+
+> Commit it
+
+### 🤖 Claude
+
+> Frank commits straight to master, so committing there.
+
+> I committed the Section Series work on ScanToAlibre's `master` as `0b0fee2` "Add Section Series, with Create Loft". It has the core, tests, dialog, ribbon change, sketch writer, docs and `Discussion.md`. I haven't pushed it.
+>
+> I didn't commit AlibreCAM's `Discussion.md`, which was rebuilt while this conversation ran in that folder.
+
+### 🧑 Frank · 06:34
+
+> <local-command-stdout>Compacted </local-command-stdout>
+
+> Create images for the scantoalibre ribbon buttons, except show scan
+
+### 🤖 Claude
+
+> Let me look at the existing icons for style.
+
+> Icons are drawn; tidying Orient (arrow runs off the tile) and Section/Section Series (planes hide the scan).
+
+> Good. Now wiring them into the add-on, project and install script.
+
+> Now the `MenuIcon` code.
+
+> Built. Updating the project notes, then installing.
+
+> I've drawn images for eight ScanToAlibre ribbon buttons: Load, Refine, Orient, Section, Section Series, Surface, Silhouette and Compare. Show Scan keeps its eye. The add-on builds and is installed, but nobody has looked at the new images in Alibre yet.
+>
+> The images use Show Scan's style: the blue tile, light grey drawings and an orange accent. Each one comes in sizes from 16 to 256 px. Below 32 px the mesh's inner lines are left out so the small ones stay readable.
+>
+> | Button | Image |
+> |---|---|
+> | Load | An orange arrow coming down onto a scanned mesh dome |
+> | Refine | A rough outline turning into a smooth orange curve, with a sparkle |
+> | Orient | An orange turning arrow round the mesh, with small axes above it |
+> | Section | One orange see-through slicing plane through the mesh |
+> | Section Series | Three thinner slicing planes through the mesh |
+> | Surface | A curved grid patch with orange control points |
+> | Silhouette | A dark dome outlined in orange, with three arrows looking down on it |
+> | Compare | The dome in heat-map colours, with the part's outline in white |
+>
+> The root, About and Insert Test Surface keep the drill icon.
+>
+> **What changed:**
+> - **The images:** the `.ico` files are in `addon\res`. They're drawn by a new script, [tools/MakeRibbonIcons.py](../ScanToAlibre/tools/MakeRibbonIcons.py), so you can change a design and run it again.
+> - **The code:** `MenuIcon` in [addon/AddOnInterface.cpp](../ScanToAlibre/addon/AddOnInterface.cpp) gives each button its own image. If a button's image is missing, it shows `ScanToAlibre.ico`.
+> - **Build and install:** the images are in the project and its `.filters` file. The build copies them next to the DLL, and `deploy\install.ps1` installs them.
+> - **Notes:** I added a line about the images to ScanToAlibre's `CLAUDE.md`.
+>
+> **To test:**
+> 1. Start Alibre and open a part. Check that each of the eight buttons on the ScanToAlibre tab shows its own image.
+> 2. Check that Show Scan still shows the eye and About still shows the drill.
+> 3. If the ribbon has a small-icon mode, check that the 16 px images are still readable.
+
+### 🧑 Frank · 06:43
+
+> Good.  Now add Help.  Each dialog will have a small question mark button that will open html help and jump to the right location.  Add a help button to the ribbon bar too - that will go the beginning, which contains an overview, and some example workflows.
+
+### 🤖 Claude
+
+> Reading the dialogs' defaults so the help page describes each field correctly, then I'll add the buttons.
+
+> Now the code: a `ShowHelp` like CAMForAlibre's, the `?` buttons, and the handler in the shared step dialog base.
+
+> 8 buttons placed (Section and Silhouette share the line). Now the handlers.
+
+> Now the Help image.
+
+> Writing the help page now.
+
+> The help page is written; building the add-on now.
+
+> Built cleanly, Alibre isn't running. Installing.
+
+> Installed. Now the notes: CLAUDE.md (and a stray character my earlier edit left in it), the spec and README.
+
+> CLAUDE.md uses LF; my earlier note added CRs. Normalising it and applying the edits.
+
+> ScanToAlibre now has help: a ? button on every dialog, a Help button on the ribbon, and a help page. It's built and installed, but untested in Alibre. I also couldn't look at the page in a browser here, because the built-in browser can't show local files.
+>
+> **The help page** is [help/ScanToAlibre.html](help/ScanToAlibre.html), in CAMForAlibre's page style:
+> - **At the top:** an overview of the workflow, then five example workflows: a machined part, a symmetric part, an organic shape (Section Series and a loft), a freeform top (Surface, then Extrude To Geometry), and checking the part with Compare.
+> - **After that:** a section for each ribbon button and dialog. Every field has a description, with its default value. That covers Show Scan and its Scan tab, Load and the keys in the view, Refine, Orient, Section, Section Series, Surface, Silhouette, Compare and About.
+>
+> **The ? buttons:**
+> - **Where they are:** a small "?" at the bottom left of all eight dialogs, About included. The buttons that were there (Undo, Create Sketch, Create Sketches, Create Surface) moved right to make room.
+> - **What they open:** each one opens the help page in your default browser at that dialog's section.
+>
+> **The Help button** sits on the ribbon before About and works in every workspace. It opens the page at the top. Its image is an orange question mark over an open book.
+>
+> **What changed:**
+> - **The code:** `ShowHelp` is new in `addon\Help.cpp`, copied from CAMForAlibre. The ? buttons in the workflow dialogs all go through the dialogs' shared base class, which picks the section from the dialog's template.
+> - **Install:** `deploy\install.ps1` now copies the page to the add-on's `help\` folder.
+> - **Notes:** I updated `CLAUDE.md`, the spec and the README. `CLAUDE.md` now also has a rule to keep the help page up to date with the code, like CAMForAlibre's.
+> - **A fix:** my earlier note about the button images had put a stray character in `CLAUDE.md` and changed its line endings. Both are put right.
+>
+> **To test:**
+> 1. Restart Alibre. The ribbon should show Help before About, with the question mark image.
+> 2. Click Help. Your browser should open the page at the overview.
+> 3. Open each dialog and click its ?. The page should jump to that dialog's section: Refine, Orient, Section, Section Series, Surface, Silhouette, Compare and About.
+> 4. Check that the moved buttons (Undo, Create Sketch, Create Sketches, Create Surface) still work.
+> 5. Read through the page, especially the workflows, and tell me anything that's wrong or missing.
+
+### 🧑 Frank · 06:51
+
+> Done.  Add the "Made by AI image to the readme.md"

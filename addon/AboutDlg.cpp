@@ -3,12 +3,14 @@
 #include "stdafx.h"
 #include "ScanToAlibre.h"
 #include "AboutDlg.h"
+#include "Help.h"
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
 
 BEGIN_MESSAGE_MAP(CAboutDlg, CDialog)
+    ON_BN_CLICKED(IDC_HELP_BUTTON, &CAboutDlg::OnHelpButton)
 END_MESSAGE_MAP()
 
 CAboutDlg::CAboutDlg(CWnd* pParent)
@@ -32,4 +34,9 @@ BOOL CAboutDlg::OnInitDialog()
     SetDlgItemText(IDC_ALIBRE_VERSION, alibreVersion);
 
     return TRUE;    // let the dialog set focus to the OK button
+}
+
+void CAboutDlg::OnHelpButton()
+{
+    ShowHelp(L"about");
 }

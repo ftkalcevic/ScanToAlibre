@@ -3,6 +3,7 @@
 #include "stdafx.h"
 #include "ScanToAlibre.h"
 #include "AddOnInterface.h"
+#include "Help.h"
 #include "AboutDlg.h"
 #include "ScanDocument.h"
 #include "ScanImport.h"
@@ -127,9 +128,9 @@ STDMETHODIMP CAddOnInterface::SubMenuItems(long menuID, SAFEARRAY** pSubMenuIDs)
         return S_OK;
 
     // Show Scan first (Frank's request), then the workflow, in order, then
-    // About. Insert Test Surface proved surface insertion and is left off
+    // Help and About. Insert Test Surface proved surface insertion and is left off
     // (SurfaceTest still has it).
-    const long children[] = { MENU_ID_SHOW_SCAN, MENU_ID_LOAD, MENU_ID_REFINE, MENU_ID_ORIENT, MENU_ID_SECTION, MENU_ID_SECTION_SERIES, MENU_ID_SURFACE, MENU_ID_SILHOUETTE, MENU_ID_COMPARE, MENU_ID_ABOUT };
+    const long children[] = { MENU_ID_SHOW_SCAN, MENU_ID_LOAD, MENU_ID_REFINE, MENU_ID_ORIENT, MENU_ID_SECTION, MENU_ID_SECTION_SERIES, MENU_ID_SURFACE, MENU_ID_SILHOUETTE, MENU_ID_COMPARE, MENU_ID_HELP, MENU_ID_ABOUT };
     const ULONG count = static_cast<ULONG>(sizeof(children) / sizeof(children[0]));
 
     // The caller takes ownership of the array.
@@ -171,6 +172,7 @@ STDMETHODIMP CAddOnInterface::MenuItemText(long menuID, BSTR* pMenuDisplayText)
     case MENU_ID_COMPARE:      *pMenuDisplayText = _bstr_t(L"Compare").Detach(); break;
     case MENU_ID_SHOW_SCAN:    *pMenuDisplayText = _bstr_t(L"Show Scan").Detach(); break;
     case MENU_ID_TEST_SURFACE: *pMenuDisplayText = _bstr_t(L"Insert Test Surface").Detach(); break;
+    case MENU_ID_HELP:   *pMenuDisplayText = _bstr_t(L"Help").Detach();     break;
     case MENU_ID_ABOUT:  *pMenuDisplayText = _bstr_t(L"About").Detach();    break;
     default: break;
     }
@@ -186,12 +188,12 @@ STDMETHODIMP CAddOnInterface::MenuItemState(long menuID, BSTR sessionIdentifier,
         return E_POINTER;
 
     // The root must be enabled too, or the whole drop-down/tab greys out.
-    // The About box works in every workspace (including Home, which passes an
+    // Help and the About box work in every workspace (including Home, which passes an
     // empty session id). The rest work on parts only, on a supported Alibre, and
     // Refine, Orient, Section, Section Series, Surface, Silhouette, Compare and
     // Show Scan once the part has a scan.
     const bool part = IsAlibreVersionSupported() && IsPartSession(sessionIdentifier);
-    if (menuID == MENU_ID_ROOT || menuID == MENU_ID_ABOUT)
+    if (menuID == MENU_ID_ROOT || menuID == MENU_ID_ABOUT || menuID == MENU_ID_HELP)
         *pType = ADDONMenuStates_ADDON_MENU_ENABLED;
     else if ((menuID == MENU_ID_TEST_SURFACE || menuID == MENU_ID_LOAD) && part)
         *pType = ADDONMenuStates_ADDON_MENU_ENABLED;
@@ -272,6 +274,10 @@ STDMETHODIMP CAddOnInterface::MenuItemToolTip(long menuID, BSTR* pToolTip)
                         ? _bstr_t(L"Insert a test B-spline surface into this part, to prove surfaces can be added. Parts only.").Detach()
                         : _bstr_t(L"ScanToAlibre needs Alibre Design 27.0.1.27039 or later.").Detach();
         break;
+    case MENU_ID_HELP:
+        *pToolTip = _bstr_t(L"Open the ScanToAlibre help in your browser: an overview, example workflows, and "
+                            L"every dialog and field. Each dialog's ? button opens its own section.").Detach();
+        break;
     case MENU_ID_ABOUT:
         *pToolTip = _bstr_t(L"Show information about the ScanToAlibre add-on").Detach();
         break;
@@ -306,6 +312,12 @@ STDMETHODIMP CAddOnInterface::InvokeCommand(long menuID, BSTR sessionIdentifier,
     if (menuID == MENU_ID_ABOUT)
     {
         ShowAboutBox();
+        return S_OK;
+    }
+
+    if (menuID == MENU_ID_HELP)
+    {
+        ShowHelp(nullptr);      // the top: the overview and example workflows
         return S_OK;
     }
 
@@ -641,15 +653,33 @@ STDMETHODIMP CAddOnInterface::MenuIcon(long menuID, BSTR* pMenuIconPath)
     if (menuID != MENU_ID_ROOT && menuID != MENU_ID_ABOUT && menuID != MENU_ID_TEST_SURFACE &&
         menuID != MENU_ID_LOAD && menuID != MENU_ID_SHOW_SCAN &&
         menuID != MENU_ID_REFINE && menuID != MENU_ID_ORIENT && menuID != MENU_ID_SECTION && menuID != MENU_ID_SECTION_SERIES &&
-        menuID != MENU_ID_SURFACE && menuID != MENU_ID_SILHOUETTE && menuID != MENU_ID_COMPARE)
+        menuID != MENU_ID_SURFACE && menuID != MENU_ID_SILHOUETTE && menuID != MENU_ID_COMPARE &&
+        menuID != MENU_ID_HELP)
         return S_OK;
 
     // The icon is deployed beside the DLL. Resolve it from our own module,
     // never from the current working directory.
-    // Show Scan has its own image (Frank's request): an eye over a scanned mesh.
+    // Each ribbon button has its own image (Frank's request; drawn by
+    // tools\MakeRibbonIcons.py, except Show Scan's eye over a scanned mesh).
+    // The root, About and Insert Test Surface keep the add-on's own icon,
+    // which is also the fallback when a button's image is missing.
+    const wchar_t* image = nullptr;
+    switch (menuID)
+    {
+    case MENU_ID_SHOW_SCAN:      image = L"ShowScan.ico"; break;
+    case MENU_ID_LOAD:           image = L"Load.ico"; break;
+    case MENU_ID_REFINE:         image = L"Refine.ico"; break;
+    case MENU_ID_ORIENT:         image = L"Orient.ico"; break;
+    case MENU_ID_SECTION:        image = L"Section.ico"; break;
+    case MENU_ID_SECTION_SERIES: image = L"SectionSeries.ico"; break;
+    case MENU_ID_SURFACE:        image = L"Surface.ico"; break;
+    case MENU_ID_SILHOUETTE:     image = L"Silhouette.ico"; break;
+    case MENU_ID_COMPARE:        image = L"Compare.ico"; break;
+    case MENU_ID_HELP:           image = L"Help.ico"; break;
+    }
     CString iconPath = GetModuleFolder() + L"ScanToAlibre.ico";
-    if (menuID == MENU_ID_SHOW_SCAN && GetFileAttributesW(GetModuleFolder() + L"ShowScan.ico") != INVALID_FILE_ATTRIBUTES)
-        iconPath = GetModuleFolder() + L"ShowScan.ico";
+    if (image != nullptr && GetFileAttributesW(GetModuleFolder() + image) != INVALID_FILE_ATTRIBUTES)
+        iconPath = GetModuleFolder() + image;
     if (GetFileAttributesW(iconPath) != INVALID_FILE_ATTRIBUTES)
         *pMenuIconPath = _bstr_t(static_cast<LPCWSTR>(iconPath)).Detach();
 

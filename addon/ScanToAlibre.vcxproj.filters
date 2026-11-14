@@ -23,6 +23,7 @@
     <ClCompile Include="ScanDisplayCommand.cpp"><Filter>Source Files</Filter></ClCompile>
     <ClCompile Include="OrientDialog.cpp"><Filter>Source Files</Filter></ClCompile>
     <ClCompile Include="CompareDialog.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="Help.cpp"><Filter>Source Files</Filter></ClCompile>
     <ClCompile Include="SectionDialog.cpp"><Filter>Source Files</Filter></ClCompile>
     <ClCompile Include="SectionSeriesDialog.cpp"><Filter>Source Files</Filter></ClCompile>
     <ClCompile Include="SurfaceDialog.cpp"><Filter>Source Files</Filter></ClCompile>
@@ -45,6 +46,7 @@
     <ClInclude Include="ScanDisplayCommand.h"><Filter>Header Files</Filter></ClInclude>
     <ClInclude Include="OrientDialog.h"><Filter>Header Files</Filter></ClInclude>
     <ClInclude Include="CompareDialog.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="Help.h"><Filter>Header Files</Filter></ClInclude>
     <ClInclude Include="SectionDialog.h"><Filter>Header Files</Filter></ClInclude>
     <ClInclude Include="SectionSeriesDialog.h"><Filter>Header Files</Filter></ClInclude>
     <ClInclude Include="SurfaceDialog.h"><Filter>Header Files</Filter></ClInclude>
@@ -68,6 +70,15 @@
   <ItemGroup>
     <Image Include="res\ScanToAlibre.ico"><Filter>Resource Files</Filter></Image>
     <Image Include="res\ShowScan.ico"><Filter>Resource Files</Filter></Image>
+    <Image Include="res\Load.ico"><Filter>Resource Files</Filter></Image>
+    <Image Include="res\Refine.ico"><Filter>Resource Files</Filter></Image>
+    <Image Include="res\Orient.ico"><Filter>Resource Files</Filter></Image>
+    <Image Include="res\Section.ico"><Filter>Resource Files</Filter></Image>
+    <Image Include="res\SectionSeries.ico"><Filter>Resource Files</Filter></Image>
+    <Image Include="res\Surface.ico"><Filter>Resource Files</Filter></Image>
+    <Image Include="res\Silhouette.ico"><Filter>Resource Files</Filter></Image>
+    <Image Include="res\Compare.ico"><Filter>Resource Files</Filter></Image>
+    <Image Include="res\Help.ico"><Filter>Resource Files</Filter></Image>
   </ItemGroup>
   <ItemGroup>
     <None Include="ScanToAlibre.def"><Filter>Add-On Files</Filter></None>
